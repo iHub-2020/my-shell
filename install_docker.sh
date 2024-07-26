@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.4
+# Version: 2.0
 
 # Function to clean up script and directory
 cleanup() {
@@ -32,14 +32,6 @@ cleanup() {
 # Ensure cleanup is called on script exit
 trap cleanup EXIT
 
-# Function to wait for apt lock release
-wait_for_apt() {
-    while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
-        echo "Waiting for other apt processes to finish..."
-        sleep 5
-    done
-}
-
 # Check and upgrade the current Debian or Ubuntu version
 echo "Checking the operating system version..."
 OS_VERSION=$(lsb_release -si)
@@ -50,33 +42,12 @@ fi
 
 echo "Current system: $OS_VERSION"
 echo "Updating the system..."
-wait_for_apt
 sudo apt-get update && sudo apt-get upgrade -y
 
 # Ensure git is installed
 if ! command -v git > /dev/null; then
     echo "Git is not installed. Installing Git..."
-
-    # Check for running apt processes
-    wait_for_apt
-
-    # Force release of APT locks
-    echo "Releasing APT locks..."
-    sudo rm -f /var/lib/dpkg/lock-frontend
-    sudo rm -f /var/lib/dpkg/lock
-    sudo rm -f /var/cache/apt/archives/lock
-
-    # Reconfigure package manager
-    echo "Reconfiguring package manager..."
-    sudo dpkg --configure -a
-
-    # Update package list
-    echo "Updating package list..."
-    sudo apt update
-
-    # Install git
-    echo "Installing git..."
-    sudo apt install -y git
+    sudo apt-get install -y git
 fi
 
 # Check for old Docker version
@@ -84,7 +55,6 @@ if command -v docker > /dev/null; then
     echo "Detected old version of Docker. Do you want to keep it? (N/y), default is 'N' after 15 seconds ..."
     read -t 15 KEEP_OLD
     if [[ "$KEEP_OLD" != "y" ]]; then
-        wait_for_apt
         echo "Stopping existing running containers..."
         sudo docker ps -q | xargs -r sudo docker stop
         echo "Uninstalling old version of Docker..."
@@ -98,7 +68,6 @@ fi
 
 # Install Docker
 echo "Installing Docker..."
-wait_for_apt
 sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
 
 # Determine the correct Docker repository based on OS
@@ -112,9 +81,7 @@ elif [[ "$OS_VERSION" == "Debian" ]]; then
     echo "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 fi
 
-wait_for_apt
 sudo apt-get update
-wait_for_apt
 sudo apt-get install -y docker-ce
 
 # Check if Docker installation was successful
@@ -129,24 +96,49 @@ echo "Docker installation successful!"
 DOCKER_VERSION=$(docker --version)
 echo "Docker Engine version: $DOCKER_VERSION"
 
-# Install Docker Compose using Docker's official plugin method
+# Install Docker Compose
 echo "Installing Docker Compose..."
-wait_for_apt
-sudo apt-get install -y docker-compose-plugin
+DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)
+
+# Use the official Docker Compose installation method
+sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+# Verify the download was successful and the file is not empty
+if [[ ! -s /usr/local/bin/docker-compose ]]; then
+    echo "Failed to download Docker Compose, exiting..."
+    exit 1
+fi
+
+# Ensure the downloaded content is correct by checking the file type
+if ! file /usr/local/bin/docker-compose | grep -q 'executable'; then
+    echo "The downloaded Docker Compose file is not a valid executable, trying to download again..."
+    sudo rm /usr/local/bin/docker-compose
+    sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+    if [[ ! -s /usr/local/bin/docker-compose ]]; then
+        echo "Failed to download Docker Compose on retry, exiting..."
+        exit 1
+    fi
+
+    if ! file /usr/local/bin/docker-compose | grep -q 'executable'; then
+        echo "The downloaded Docker Compose file is not a valid executable after retry, exiting..."
+        exit 1
+    fi
+fi
+
+# Make it executable
+sudo chmod +x /usr/local/bin/docker-compose
 
 # Check if Docker Compose installation was successful
-if ! docker compose version > /dev/null 2>&1; then
+if ! command -v docker-compose > /dev/null; then
     echo "Docker Compose installation failed, but continuing to cleanup..."
 else
     echo "Docker Compose installation successful!"
     # Display Docker Compose version
-    DOCKER_COMPOSE_VERSION_OUTPUT=$(docker compose version)
+    DOCKER_COMPOSE_VERSION_OUTPUT=$(docker-compose --version)
     echo "Docker Compose version: $DOCKER_COMPOSE_VERSION_OUTPUT"
 fi
 
 # Output final versions of Docker and Docker Compose
 echo "Final Docker version: $DOCKER_VERSION"
 echo "Final Docker Compose version: ${DOCKER_COMPOSE_VERSION_OUTPUT:-"Not installed"}"
-
-# Clean up: Remove the script and the current directory
-cleanup
