@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.0
+# Version: 2.1
 
 # Function to clean up script and directory
 cleanup() {
@@ -47,7 +47,37 @@ sudo apt-get update && sudo apt-get upgrade -y
 # Ensure git is installed
 if ! command -v git > /dev/null; then
     echo "Git is not installed. Installing Git..."
-    sudo apt-get install -y git
+
+    # Check for running apt processes
+    echo "Checking for running apt processes..."
+    APT_PROCESSES=$(ps aux | grep [a]pt)
+
+    if [[ -n "$APT_PROCESSES" ]]; then
+        echo "Found running apt processes. Waiting for them to complete..."
+        while [[ -n "$APT_PROCESSES" ]]; do
+            sleep 5
+            APT_PROCESSES=$(ps aux | grep [a]pt)
+        done
+        echo "No more running apt processes."
+    fi
+
+    # Force release of APT locks
+    echo "Releasing APT locks..."
+    sudo rm -f /var/lib/dpkg/lock-frontend
+    sudo rm -f /var/lib/dpkg/lock
+    sudo rm -f /var/cache/apt/archives/lock
+
+    # Reconfigure package manager
+    echo "Reconfiguring package manager..."
+    sudo dpkg --configure -a
+
+    # Update package list
+    echo "Updating package list..."
+    sudo apt update
+
+    # Install git
+    echo "Installing git..."
+    sudo apt install -y git
 fi
 
 # Check for old Docker version
