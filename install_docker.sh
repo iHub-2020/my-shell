@@ -14,15 +14,15 @@ sudo apt-get update && sudo apt-get upgrade -y
 
 # Check for old Docker version
 if command -v docker > /dev/null; then
-    echo "Detected old version of Docker, do you want to keep it? (y/n), default is 'n' after 10 seconds ..."
-    read -t 10 KEEP_OLD
-    if [[ "$KEEP_OLD" != "y" ]]; then
+    echo "Detected old version of Docker. Do you want to keep it? (n/y), default is 'n' after 15 seconds ..."
+    read -t 15 KEEP_OLD
+    if [[ "$KEEP_OLD" != "n" ]]; then
         echo "Stopping existing running containers..."
         sudo docker ps -q | xargs -r sudo docker stop
         echo "Uninstalling old version of Docker..."
         sudo apt-get remove -y docker docker-engine docker.io containerd runc
     else
-        echo "Keeping old version of Docker."
+        echo "Keeping the old version of Docker."
     fi
 else
     echo "No old version of Docker detected."
@@ -58,5 +58,8 @@ fi
 
 echo "Docker Compose installation successful!"
 
-# Completion
+# Remove the script and return to the home directory
+echo "Cleaning up..."
+rm -f install_docker.sh
+cd ~
 echo "Docker and Docker Compose installation completed!"
