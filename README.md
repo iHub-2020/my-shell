@@ -23,8 +23,3 @@
 
 ```sh
 wget -O install_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh && chmod +x install_docker.sh && ./install_docker.sh
-
-### 使用  `curl`
-
-```sh
-curl -o install_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh && chmod +x install_docker.sh && ./install_docker.sh
