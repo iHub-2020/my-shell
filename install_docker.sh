@@ -31,8 +31,14 @@ fi
 # 安装 Docker
 echo "正在安装 Docker..."
 sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-echo "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# 添加 Docker GPG 密钥
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+# 添加 Docker 源
+echo "deb [signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# 更新包索引并安装 Docker
 sudo apt-get update
 sudo apt-get install -y docker-ce
 
@@ -40,9 +46,9 @@ sudo apt-get install -y docker-ce
 if ! command -v docker > /dev/null; then
     echo "Docker 安装失败，退出..."
     exit 1
+else
+    echo "Docker 安装成功！版本：$(docker --version)"
 fi
-
-echo "Docker 安装成功！"
 
 # 安装 Docker Compose
 echo "正在安装 Docker Compose..."
@@ -54,9 +60,9 @@ sudo chmod +x /usr/local/bin/docker-compose
 if ! command -v docker-compose > /dev/null; then
     echo "Docker Compose 安装失败，退出..."
     exit 1
+else
+    echo "Docker Compose 安装成功！版本：$(docker-compose --version)"
 fi
-
-echo "Docker Compose 安装成功！"
 
 # 完成
 echo "Docker 和 Docker Compose 安装完成！"
