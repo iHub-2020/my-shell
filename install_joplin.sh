@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.0
+# Version: 1.1
 # Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
 
 # Update system package list and upgrade existing packages
@@ -17,10 +17,10 @@ sudo apt-get update
 sudo apt-get install -y postgresql postgresql-contrib
 
 # Prompt user to enter PostgreSQL username and password
-read -t 30 -p "Enter PostgreSQL username (default: admin): " POSTGRES_USER
+read -t 60 -p "Enter PostgreSQL username (default: admin): " POSTGRES_USER
 POSTGRES_USER=${POSTGRES_USER:-admin}
 
-read -t 30 -s -p "Enter PostgreSQL password (default: password): " POSTGRES_PASSWORD
+read -t 60 -s -p "Enter PostgreSQL password (default: password): " POSTGRES_PASSWORD
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
 echo
 
@@ -36,7 +36,8 @@ echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/source
 sudo apt-get update && sudo apt-get install -y yarn
 
 # Download and install Joplin server
-mkdir -p /opt/joplin
+sudo mkdir -p /opt/joplin
+sudo chown $(whoami):$(whoami) /opt/joplin
 cd /opt/joplin
 git clone https://github.com/laurent22/joplin.git
 cd joplin/packages/server
@@ -67,7 +68,7 @@ sudo systemctl enable joplin-server
 
 # Prompt for domain binding
 echo "Enter the domain to bind (leave empty to use local IP):"
-read -t 15 -p "Domain (default: local IP): " DOMAIN
+read -t 60 -p "Domain (default: local IP): " DOMAIN
 
 if [ -z "$DOMAIN" ]; then
     IP=$(hostname -I | awk '{print $1}')
@@ -106,8 +107,7 @@ EOF
 
 # Enable Nginx configuration
 sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
+sudo nginx -t && sudo systemctl restart nginx
 
 # Print completion message
 if [ "$DOMAIN" == "$IP" ]; then
