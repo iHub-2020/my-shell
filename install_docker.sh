@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.2
+# Version: 2.3
 
 # Function to clean up script and directory
 cleanup() {
@@ -129,46 +129,18 @@ echo "Docker installation successful!"
 DOCKER_VERSION=$(docker --version)
 echo "Docker Engine version: $DOCKER_VERSION"
 
-# Install Docker Compose
+# Install Docker Compose using Docker's official plugin method
 echo "Installing Docker Compose..."
-DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)
-
-# Use the official Docker Compose installation method
-sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-
-# Verify the download was successful and the file is not empty
-if [[ ! -s /usr/local/bin/docker-compose ]]; then
-    echo "Failed to download Docker Compose, exiting..."
-    exit 1
-fi
-
-# Ensure the downloaded content is correct by checking the file type
-if ! file /usr/local/bin/docker-compose | grep -q 'executable'; then
-    echo "The downloaded Docker Compose file is not a valid executable, trying to download again..."
-    sudo rm /usr/local/bin/docker-compose
-    sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-
-    if [[ ! -s /usr/local/bin/docker-compose ]]; then
-        echo "Failed to download Docker Compose on retry, exiting..."
-        exit 1
-    fi
-
-    if ! file /usr/local/bin/docker-compose | grep -q 'executable'; then
-        echo "The downloaded Docker Compose file is not a valid executable after retry, exiting..."
-        exit 1
-    fi
-fi
-
-# Make it executable
-sudo chmod +x /usr/local/bin/docker-compose
+wait_for_apt
+sudo apt-get install -y docker-compose-plugin
 
 # Check if Docker Compose installation was successful
-if ! command -v docker-compose > /dev/null; then
+if ! docker compose version > /dev/null 2>&1; then
     echo "Docker Compose installation failed, but continuing to cleanup..."
 else
     echo "Docker Compose installation successful!"
     # Display Docker Compose version
-    DOCKER_COMPOSE_VERSION_OUTPUT=$(docker-compose --version)
+    DOCKER_COMPOSE_VERSION_OUTPUT=$(docker compose version)
     echo "Docker Compose version: $DOCKER_COMPOSE_VERSION_OUTPUT"
 fi
 
