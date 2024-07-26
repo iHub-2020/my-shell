@@ -14,9 +14,9 @@ sudo apt-get update && sudo apt-get upgrade -y
 
 # Check for old Docker version
 if command -v docker > /dev/null; then
-    echo "Detected old version of Docker. Do you want to keep it? (y/n), default is 'y' after 15 seconds ..."
+    echo "Detected old version of Docker. Do you want to keep it? (N/y), default is 'N' after 15 seconds ..."
     read -t 15 KEEP_OLD
-    if [[ "$KEEP_OLD" != "y" ]]; then
+    if [[ "$KEEP_OLD" != "n" ]]; then
         echo "Stopping existing running containers..."
         sudo docker ps -q | xargs -r sudo docker stop
         echo "Uninstalling old version of Docker..."
