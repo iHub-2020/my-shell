@@ -19,11 +19,3 @@ git clone https://github.com/iHub-2020/docker-shell.git && cd docker-shell && ch
 检查并可选卸载旧版本的 Docker
 安装最新版本的 Docker Engine
 安装最新版本的 Docker Compose
-
-示例
-![执行示例][]## 关于本项目由 iHub-2020 维护，旨在简化 Docker 和 Docker Compose 的安装过程。## 许可证MIT © 2024 iHub-2020```###
-说明
-1. 使用方法部分提供了简洁的命令，用户只需复制粘贴执行。
-2. 功能部分简要说明了脚本的主要功能。
-3. 示例部分提供一个执行脚本的截图，可以帮助用户直观了解脚本的执行效果。
-4. 关于和许可证部分提供了项目的背景信息和开源协议。
