@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.1
+# Version: 2.2
 
 # Function to clean up script and directory
 cleanup() {
@@ -32,6 +32,14 @@ cleanup() {
 # Ensure cleanup is called on script exit
 trap cleanup EXIT
 
+# Function to wait for apt lock release
+wait_for_apt() {
+    while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+        echo "Waiting for other apt processes to finish..."
+        sleep 5
+    done
+}
+
 # Check and upgrade the current Debian or Ubuntu version
 echo "Checking the operating system version..."
 OS_VERSION=$(lsb_release -si)
@@ -42,6 +50,7 @@ fi
 
 echo "Current system: $OS_VERSION"
 echo "Updating the system..."
+wait_for_apt
 sudo apt-get update && sudo apt-get upgrade -y
 
 # Ensure git is installed
@@ -49,17 +58,7 @@ if ! command -v git > /dev/null; then
     echo "Git is not installed. Installing Git..."
 
     # Check for running apt processes
-    echo "Checking for running apt processes..."
-    APT_PROCESSES=$(ps aux | grep [a]pt)
-
-    if [[ -n "$APT_PROCESSES" ]]; then
-        echo "Found running apt processes. Waiting for them to complete..."
-        while [[ -n "$APT_PROCESSES" ]]; do
-            sleep 5
-            APT_PROCESSES=$(ps aux | grep [a]pt)
-        done
-        echo "No more running apt processes."
-    fi
+    wait_for_apt
 
     # Force release of APT locks
     echo "Releasing APT locks..."
@@ -85,6 +84,7 @@ if command -v docker > /dev/null; then
     echo "Detected old version of Docker. Do you want to keep it? (N/y), default is 'N' after 15 seconds ..."
     read -t 15 KEEP_OLD
     if [[ "$KEEP_OLD" != "y" ]]; then
+        wait_for_apt
         echo "Stopping existing running containers..."
         sudo docker ps -q | xargs -r sudo docker stop
         echo "Uninstalling old version of Docker..."
@@ -98,6 +98,7 @@ fi
 
 # Install Docker
 echo "Installing Docker..."
+wait_for_apt
 sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
 
 # Determine the correct Docker repository based on OS
@@ -111,7 +112,9 @@ elif [[ "$OS_VERSION" == "Debian" ]]; then
     echo "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 fi
 
+wait_for_apt
 sudo apt-get update
+wait_for_apt
 sudo apt-get install -y docker-ce
 
 # Check if Docker installation was successful
