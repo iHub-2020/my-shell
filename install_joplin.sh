@@ -1,20 +1,48 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.5
+# Version: 1.7
 # Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
+
+# Function to install a package if not already installed
+install_if_not_installed() {
+    if ! dpkg -l | grep -q "$1"; then
+        sudo apt-get install -y "$1"
+    fi
+}
+
+# Function to prompt user and handle existing directories
+handle_existing_directory() {
+    local dir=$1
+    if [ -d "$dir" ]; then
+        echo "Directory $dir already exists."
+        read -t 15 -p "Do you want to keep it? (default: yes) [yes/no]: " KEEP_DIR
+        KEEP_DIR=${KEEP_DIR:-yes}
+        if [ "$KEEP_DIR" == "no" ]; then
+            sudo rm -rf "$dir"
+            echo "Directory $dir has been removed."
+        else
+            echo "Keeping existing directory $dir."
+        fi
+    fi
+}
 
 # Update system package list and upgrade existing packages
 sudo apt-get update && sudo apt-get upgrade -y
 
 # Install necessary packages
-sudo apt-get install -y curl wget gnupg2 software-properties-common
+install_if_not_installed curl
+install_if_not_installed wget
+install_if_not_installed gnupg2
+install_if_not_installed software-properties-common
+install_if_not_installed git
 
 # Add PostgreSQL official repository and install PostgreSQL
 wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
 sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
 sudo apt-get update
-sudo apt-get install -y postgresql postgresql-contrib
+install_if_not_installed postgresql
+install_if_not_installed postgresql-contrib
 
 # Prompt user to enter PostgreSQL username and password
 read -t 60 -p "Enter PostgreSQL username (default: admin): " POSTGRES_USER
@@ -30,17 +58,21 @@ sudo -i -u postgres psql -c "CREATE DATABASE imaticdb WITH OWNER $POSTGRES_USER;
 
 # Install Node.js and Yarn
 curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
-sudo apt-get install -y nodejs
+install_if_not_installed nodejs
 curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
 echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt-get update && sudo apt-get install -y yarn
+sudo apt-get update
+install_if_not_installed yarn
+
+# Handle existing Joplin directory
+handle_existing_directory /opt/joplin
 
 # Download and install Joplin server
 sudo mkdir -p /opt/joplin
 sudo chown $(whoami):$(whoami) /opt/joplin
 cd /opt/joplin
 git clone https://github.com/laurent22/joplin.git
-cd joplin/packages/server
+cd joplin/packages/server || { echo "Failed to change directory to joplin/packages/server"; exit 1; }
 yarn install
 yarn run build
 
@@ -79,7 +111,7 @@ else
 fi
 
 # Install and configure Nginx
-sudo apt-get install -y nginx
+install_if_not_installed nginx
 
 if [[ "$DOMAIN" == "$IP" ]]; then
     # Configure Nginx for local IP without SSL
@@ -99,7 +131,8 @@ server {
 EOF
 else
     # Configure Nginx for domain with SSL
-    sudo apt-get install -y certbot python3-certbot-nginx
+    install_if_not_installed certbot
+    install_if_not_installed python3-certbot-nginx
     sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m your-email@example.com
 
     # Check if SSL certificates were successfully issued
@@ -150,7 +183,7 @@ EOF
 fi
 
 # Enable Nginx configuration
-sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/ || sudo rm /etc/nginx/sites-enabled/joplin && sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl restart nginx
 
 # Check if port 22300 is open, if not, open it
@@ -161,7 +194,7 @@ if command -v ufw >/dev/null 2>&1; then
         sudo ufw reload
     fi
 else
-    echo "ufw is not installed. Checking iptables..."
+    install_if_not_installed iptables
     if ! sudo iptables -C INPUT -p tcp --dport 22300 -j ACCEPT >/dev/null 2>&1; then
         echo "Port 22300 is not open in iptables. Opening port 22300..."
         sudo iptables -A INPUT -p tcp --dport 22300 -j ACCEPT
