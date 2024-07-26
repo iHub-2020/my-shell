@@ -1,37 +1,41 @@
 #!/bin/bash
 
-# 更新系统包列表并升级现有软件包
+# Author: reyanmatic
+# Version: 1.0
+# Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
+
+# Update system package list and upgrade existing packages
 sudo apt-get update && sudo apt-get upgrade -y
 
-# 安装必要的软件包
+# Install necessary packages
 sudo apt-get install -y curl wget gnupg2 software-properties-common
 
-# 添加 PostgreSQL 官方仓库并安装 PostgreSQL
+# Add PostgreSQL official repository and install PostgreSQL
 wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
 sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
 sudo apt-get update
 sudo apt-get install -y postgresql postgresql-contrib
 
-# 提示用户输入 PostgreSQL 用户名和密码
-read -t 30 -p "请输入 PostgreSQL 用户名（默认：admin）： " POSTGRES_USER
+# Prompt user to enter PostgreSQL username and password
+read -t 30 -p "Enter PostgreSQL username (default: admin): " POSTGRES_USER
 POSTGRES_USER=${POSTGRES_USER:-admin}
 
-read -t 30 -s -p "请输入 PostgreSQL 密码（默认：password）： " POSTGRES_PASSWORD
+read -t 30 -s -p "Enter PostgreSQL password (default: password): " POSTGRES_PASSWORD
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
 echo
 
-# 设置 PostgreSQL
+# Configure PostgreSQL
 sudo -i -u postgres psql -c "CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';"
 sudo -i -u postgres psql -c "CREATE DATABASE imaticdb WITH OWNER $POSTGRES_USER;"
 
-# 安装 Node.js 和 Yarn
+# Install Node.js and Yarn
 curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
 sudo apt-get install -y nodejs
 curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
 echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
 sudo apt-get update && sudo apt-get install -y yarn
 
-# 下载并安装 Joplin 服务器
+# Download and install Joplin server
 mkdir -p /opt/joplin
 cd /opt/joplin
 git clone https://github.com/laurent22/joplin.git
@@ -39,7 +43,7 @@ cd joplin/packages/server
 yarn install
 yarn run build
 
-# 创建 Joplin 服务器的服务文件
+# Create Joplin server service file
 sudo tee /etc/systemd/system/joplin-server.service > /dev/null <<EOF
 [Unit]
 Description=Joplin Server
@@ -56,27 +60,27 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-# 启动并启用 Joplin 服务器服务
+# Start and enable Joplin server service
 sudo systemctl daemon-reload
 sudo systemctl start joplin-server
 sudo systemctl enable joplin-server
 
-# 提示是否绑定域名
-echo "请输入要绑定的域名（如果没有域名，将使用本地IP地址）："
-read -t 15 -p "域名（留空使用本地IP）： " DOMAIN
+# Prompt for domain binding
+echo "Enter the domain to bind (leave empty to use local IP):"
+read -t 15 -p "Domain (default: local IP): " DOMAIN
 
 if [ -z "$DOMAIN" ]; then
     IP=$(hostname -I | awk '{print $1}')
     DOMAIN=$IP
-    echo "未输入域名，将使用本地IP地址：$DOMAIN"
+    echo "No domain entered, using local IP: $DOMAIN"
 else
-    echo "绑定域名：$DOMAIN"
-    # 安装 Certbot 并申请 SSL/TLS 证书
+    echo "Binding domain: $DOMAIN"
+    # Install Certbot and obtain SSL/TLS certificate
     sudo apt-get install -y certbot python3-certbot-nginx
     sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m your-email@example.com
 fi
 
-# 安装并配置 Nginx
+# Install and configure Nginx
 sudo apt-get install -y nginx
 sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
 server {
@@ -91,7 +95,7 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
-    # SSL/TLS 配置
+    # SSL/TLS configuration
     listen 443 ssl;
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
@@ -100,14 +104,14 @@ server {
 }
 EOF
 
-# 启用 Nginx 配置
+# Enable Nginx configuration
 sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl restart nginx
 
-# 打印完成信息
+# Print completion message
 if [ "$DOMAIN" == "$IP" ]; then
-    echo "Joplin Server 安装完成！您可以通过 http://$DOMAIN:22300 访问 Joplin 服务器。"
+    echo "Joplin Server installation completed! You can access it via http://$DOMAIN:22300"
 else
-    echo "Joplin Server 安装完成！您可以通过 https://$DOMAIN 访问 Joplin 服务器。"
+    echo "Joplin Server installation completed! You can access it via https://$DOMAIN"
 fi
