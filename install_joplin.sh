@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.7
+# Version: 1.8
 # Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
 
 # Function to install a package if not already installed
@@ -23,6 +23,36 @@ handle_existing_directory() {
             echo "Directory $dir has been removed."
         else
             echo "Keeping existing directory $dir."
+        fi
+    fi
+}
+
+# Function to prompt user and handle existing PostgreSQL user and database
+handle_existing_postgres() {
+    local user=$1
+    local db=$2
+
+    if sudo -i -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$user'" | grep -q 1; then
+        echo "PostgreSQL user $user already exists."
+        read -t 15 -p "Do you want to keep it? (default: yes) [yes/no]: " KEEP_USER
+        KEEP_USER=${KEEP_USER:-yes}
+        if [ "$KEEP_USER" == "no" ]; then
+            sudo -i -u postgres psql -c "DROP USER $user;"
+            echo "PostgreSQL user $user has been removed."
+        else
+            echo "Keeping existing PostgreSQL user $user."
+        fi
+    fi
+
+    if sudo -i -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
+        echo "PostgreSQL database $db already exists."
+        read -t 15 -p "Do you want to keep it? (default: yes) [yes/no]: " KEEP_DB
+        KEEP_DB=${KEEP_DB:-yes}
+        if [ "$KEEP_DB" == "no" ]; then
+            sudo -i -u postgres psql -c "DROP DATABASE $db;"
+            echo "PostgreSQL database $db has been removed."
+        else
+            echo "Keeping existing PostgreSQL database $db."
         fi
     fi
 }
@@ -51,6 +81,9 @@ POSTGRES_USER=${POSTGRES_USER:-admin}
 read -t 60 -s -p "Enter PostgreSQL password (default: password): " POSTGRES_PASSWORD
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
 echo
+
+# Handle existing PostgreSQL user and database
+handle_existing_postgres $POSTGRES_USER imaticdb
 
 # Configure PostgreSQL
 sudo -i -u postgres psql -c "CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';"
