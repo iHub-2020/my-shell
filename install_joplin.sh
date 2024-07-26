@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.1
+# Version: 2.2
 # Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
 
 # Function to install a package if not already installed
@@ -27,9 +27,10 @@ handle_existing_directory() {
     fi
 }
 
-# Function to prompt user and handle existing PostgreSQL database
+# Function to prompt user and handle existing PostgreSQL database and user
 handle_existing_database() {
     local db=$1
+    local user=$2
 
     if sudo -i -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
         echo "PostgreSQL database $db already exists."
@@ -37,57 +38,13 @@ handle_existing_database() {
         KEEP_DB=${KEEP_DB:-y}
         if [ "$KEEP_DB" == "n" ]; then
             sudo -i -u postgres psql -c "DROP DATABASE $db;"
-            echo "PostgreSQL database $db has been removed."
+            sudo -i -u postgres psql -c "DROP USER $user;"
+            echo "PostgreSQL database $db and user $user have been removed."
         else
             echo "Keeping existing PostgreSQL database $db."
         fi
     fi
 }
-
-# DEPRECATION WARNING
-echo "================================================================================"
-echo "================================================================================"
-echo "                              DEPRECATION WARNING                                "
-echo "  Node.js 14.x is no longer actively supported!"
-echo "  You will not receive security or critical stability updates for this version."
-echo "  You should migrate to a supported version of Node.js as soon as possible."
-echo "  Use the installation script that corresponds to the version of Node.js you"
-echo "  wish to install. e.g."
-echo "   * https://deb.nodesource.com/setup_16.x — Node.js 16 \"Gallium\""
-echo "   * https://deb.nodesource.com/setup_18.x — Node.js 18 LTS \"Hydrogen\" (recommended)"
-echo "   * https://deb.nodesource.com/setup_19.x — Node.js 19 \"Nineteen\""
-echo "   * https://deb.nodesource.com/setup_20.x — Node.js 20 \"Iron\" (current)"
-echo "  Please see https://github.com/nodejs/Release for details about which"
-echo "  version may be appropriate for you."
-echo "  The NodeSource Node.js distributions repository contains"
-echo "  information both about supported versions of Node.js and supported Linux"
-echo "  distributions. To learn more about usage, see the repository:"
-echo "    https://github.com/nodesource/distributions"
-echo "================================================================================"
-echo "================================================================================"
-echo "Continuing in 5 seconds ..."
-sleep 5
-
-echo "================================================================================"
-echo "▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓"
-echo "================================================================================"
-echo "                           SCRIPT DEPRECATION WARNING                             "
-echo "  This script, located at https://deb.nodesource.com/setup_X, used to"
-echo "  install Node.js is deprecated now and will eventually be made inactive."
-echo "  Please visit the NodeSource distributions Github and follow the"
-echo "  instructions to migrate your repo."
-echo "  https://github.com/nodesource/distributions"
-echo "  The NodeSource Node.js Linux distributions GitHub repository contains"
-echo "  information about which versions of Node.js and which Linux distributions"
-echo "  are supported and how to install it."
-echo "  https://github.com/nodesource/distributions"
-echo "                          SCRIPT DEPRECATION WARNING"
-echo "================================================================================"
-echo "▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓"
-echo "================================================================================"
-echo "TO AVOID THIS WAIT MIGRATE THE SCRIPT"
-echo "Continuing in 5 seconds (press Ctrl-C to abort) ..."
-sleep 5
 
 # Update system package list and upgrade existing packages
 sudo apt-get update && sudo apt-get upgrade -y
@@ -114,8 +71,8 @@ read -t 60 -s -p "Enter PostgreSQL password (default: password): " POSTGRES_PASS
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
 echo
 
-# Handle existing PostgreSQL database
-handle_existing_database imaticdb
+# Handle existing PostgreSQL database and user
+handle_existing_database imaticdb $POSTGRES_USER
 
 # Configure PostgreSQL
 sudo -i -u postgres psql -c "CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';"
