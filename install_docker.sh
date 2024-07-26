@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 1.8
+# Version: 1.9
 
 # Check and upgrade the current Debian or Ubuntu version
 echo "Checking the operating system version..."
@@ -71,7 +71,7 @@ echo "Docker Engine version: $DOCKER_VERSION"
 echo "Installing Docker Compose..."
 DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)
 
-# Download Docker Compose
+# Use the official Docker Compose installation method
 sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 
 # Verify the download was successful and the file is not empty
