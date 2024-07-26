@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.1
+# Version: 1.5
 # Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
 
 # Update system package list and upgrade existing packages
@@ -66,9 +66,9 @@ sudo systemctl daemon-reload
 sudo systemctl start joplin-server
 sudo systemctl enable joplin-server
 
-# Prompt for domain binding
-echo "Enter the domain to bind (leave empty to use local IP):"
-read -t 60 -p "Domain (default: local IP): " DOMAIN
+# Prompt for domain or local IP
+echo "Enter the domain or local IP to bind (leave empty to use local IP):"
+read -t 60 -p "Domain or IP (default: local IP): " DOMAIN
 
 if [ -z "$DOMAIN" ]; then
     IP=$(hostname -I | awk '{print $1}')
@@ -76,14 +76,14 @@ if [ -z "$DOMAIN" ]; then
     echo "No domain entered, using local IP: $DOMAIN"
 else
     echo "Binding domain: $DOMAIN"
-    # Install Certbot and obtain SSL/TLS certificate
-    sudo apt-get install -y certbot python3-certbot-nginx
-    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m your-email@example.com
 fi
 
 # Install and configure Nginx
 sudo apt-get install -y nginx
-sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
+
+if [[ "$DOMAIN" == "$IP" ]]; then
+    # Configure Nginx for local IP without SSL
+    sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
@@ -95,23 +95,83 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
+}
+EOF
+else
+    # Configure Nginx for domain with SSL
+    sudo apt-get install -y certbot python3-certbot-nginx
+    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m your-email@example.com
 
-    # SSL/TLS configuration
+    # Check if SSL certificates were successfully issued
+    if [ -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem ]; then
+        sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
     listen 443 ssl;
+    server_name $DOMAIN;
+
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        proxy_pass http://localhost:22300;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
 }
 EOF
+    else
+        # Fallback to HTTP if SSL certificate issuance failed
+        echo "SSL certificate issuance failed, falling back to HTTP."
+        sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    location / {
+        proxy_pass http://localhost:22300;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+    fi
+fi
 
 # Enable Nginx configuration
 sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl restart nginx
 
+# Check if port 22300 is open, if not, open it
+if command -v ufw >/dev/null 2>&1; then
+    if ! sudo ufw status | grep -q "22300/tcp"; then
+        echo "Port 22300 is not open. Opening port 22300..."
+        sudo ufw allow 22300/tcp
+        sudo ufw reload
+    fi
+else
+    echo "ufw is not installed. Checking iptables..."
+    if ! sudo iptables -C INPUT -p tcp --dport 22300 -j ACCEPT >/dev/null 2>&1; then
+        echo "Port 22300 is not open in iptables. Opening port 22300..."
+        sudo iptables -A INPUT -p tcp --dport 22300 -j ACCEPT
+        sudo iptables-save | sudo tee /etc/iptables/rules.v4
+    fi
+fi
+
 # Print completion message
-if [ "$DOMAIN" == "$IP" ]; then
+if [[ "$DOMAIN" == "$IP" ]]; then
     echo "Joplin Server installation completed! You can access it via http://$DOMAIN:22300"
 else
-    echo "Joplin Server installation completed! You can access it via https://$DOMAIN"
+    echo "Joplin Server installation completed! You can access it via https://$DOMAIN:22300"
 fi
