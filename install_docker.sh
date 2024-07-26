@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.3
+# Version: 2.4
 
 # Function to clean up script and directory
 cleanup() {
@@ -147,3 +147,6 @@ fi
 # Output final versions of Docker and Docker Compose
 echo "Final Docker version: $DOCKER_VERSION"
 echo "Final Docker Compose version: ${DOCKER_COMPOSE_VERSION_OUTPUT:-"Not installed"}"
+
+# Clean up: Remove the script and the current directory
+cleanup
