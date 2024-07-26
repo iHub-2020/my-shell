@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 1.6
+# Version: 1.8
 
 # Check and upgrade the current Debian or Ubuntu version
 echo "Checking the operating system version..."
@@ -14,6 +14,12 @@ fi
 echo "Current system: $OS_VERSION"
 echo "Updating the system..."
 sudo apt-get update && sudo apt-get upgrade -y
+
+# Ensure git is installed
+if ! command -v git > /dev/null; then
+    echo "Git is not installed. Installing Git..."
+    sudo apt-get install -y git
+fi
 
 # Check for old Docker version
 if command -v docker > /dev/null; then
@@ -68,10 +74,27 @@ DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/rel
 # Download Docker Compose
 sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 
-# Verify the download was successful
+# Verify the download was successful and the file is not empty
 if [[ ! -s /usr/local/bin/docker-compose ]]; then
     echo "Failed to download Docker Compose, exiting..."
     exit 1
+fi
+
+# Ensure the downloaded content is correct by checking the file type
+if ! file /usr/local/bin/docker-compose | grep -q 'executable'; then
+    echo "The downloaded Docker Compose file is not a valid executable, trying to download again..."
+    sudo rm /usr/local/bin/docker-compose
+    sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+    if [[ ! -s /usr/local/bin/docker-compose ]]; then
+        echo "Failed to download Docker Compose on retry, exiting..."
+        exit 1
+    fi
+
+    if ! file /usr/local/bin/docker-compose | grep -q 'executable'; then
+        echo "The downloaded Docker Compose file is not a valid executable after retry, exiting..."
+        exit 1
+    fi
 fi
 
 # Make it executable
