@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 1.4
+# Version: 1.6
 
 # Check and upgrade the current Debian or Ubuntu version
 echo "Checking the operating system version..."
@@ -58,8 +58,8 @@ fi
 echo "Docker installation successful!"
 
 # Display Docker Engine version
-echo "Docker Engine version:"
-docker --version
+DOCKER_VERSION=$(docker --version)
+echo "Docker Engine version: $DOCKER_VERSION"
 
 # Install Docker Compose
 echo "Installing Docker Compose..."
@@ -86,8 +86,12 @@ fi
 echo "Docker Compose installation successful!"
 
 # Display Docker Compose version
-echo "Docker Compose version:"
-docker-compose --version
+DOCKER_COMPOSE_VERSION_OUTPUT=$(docker-compose --version)
+echo "Docker Compose version: $DOCKER_COMPOSE_VERSION_OUTPUT"
+
+# Output final versions of Docker and Docker Compose
+echo "Final Docker version: $DOCKER_VERSION"
+echo "Final Docker Compose version: $DOCKER_COMPOSE_VERSION_OUTPUT"
 
 # Clean up: Remove the script and the current directory
 echo "Cleaning up..."
@@ -110,11 +114,5 @@ if [ -d "$SCRIPT_DIR" ]; then
 else
     echo "Directory $SCRIPT_DIR does not exist."
 fi
-
-# Output final versions of Docker and Docker Compose
-echo "Final Docker version:"
-docker --version
-echo "Final Docker Compose version:"
-docker-compose --version
 
 echo "Docker and Docker Compose installation completed!"
