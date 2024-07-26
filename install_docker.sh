@@ -31,8 +31,18 @@ fi
 # Install Docker
 echo "Installing Docker..."
 sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-echo "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Determine the correct Docker repository based on OS
+if [[ "$OS_VERSION" == "Ubuntu" ]]; then
+    echo "Adding Docker's official GPG key and repository for Ubuntu..."
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    echo "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+elif [[ "$OS_VERSION" == "Debian" ]]; then
+    echo "Adding Docker's official GPG key and repository for Debian..."
+    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+    echo "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+fi
+
 sudo apt-get update
 sudo apt-get install -y docker-ce
 
@@ -60,8 +70,13 @@ echo "Docker Compose installation successful!"
 
 # Clean up: Remove the script and the current directory
 echo "Cleaning up..."
-SCRIPT_DIR=$(dirname "$0")
-cd "$SCRIPT_DIR" || exit
-cd .. && rm -rf "$SCRIPT_DIR"
-cd ~
-echo "Docker and Docker Compose installation completed!"
+SCRIPT_DIR=$(dirname "$(realpath "$0")") # 获取脚本的绝对路径
+
+# 检查目录是否存在
+if [ -d "$SCRIPT_DIR" ]; then
+    echo "Removing directory: $SCRIPT_DIR"
+    cd "$SCRIPT_DIR" || exit
+    cd .. && rm -rf "$SCRIPT_DIR"
+else
+    echo "Directory $SCRIPT_DIR does not exist."
+fi
