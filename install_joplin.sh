@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.4
+# Version: 2.5
 # Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
 
 # Function to install a package if not already installed
@@ -80,6 +80,9 @@ sudo -i -u postgres psql -c "CREATE DATABASE imaticdb WITH OWNER $POSTGRES_USER;
 
 # Handle existing Joplin directory
 handle_existing_directory /opt/joplin
+
+# Ensure git is installed before cloning the repository
+install_if_not_installed git
 
 # Download and install Joplin server
 sudo mkdir -p /opt/joplin
