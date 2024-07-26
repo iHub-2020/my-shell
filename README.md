@@ -19,4 +19,8 @@
 只需执行以下命令：
 
 ```sh
-git clone https://github.com/iHub-2020/docker-shell.git && cd docker-shell && chmod +x install_docker.sh && ./install_docker.sh
+wget -O install_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh && chmod +x install_docker.sh && ./install_docker.sh
+
+```sh
+
+curl -o install_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh && chmod +x install_docker.sh && ./install_docker.sh
