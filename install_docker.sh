@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 1.1
+# Version: 1.4
 
 # Check and upgrade the current Debian or Ubuntu version
 echo "Checking the operating system version..."
@@ -19,7 +19,7 @@ sudo apt-get update && sudo apt-get upgrade -y
 if command -v docker > /dev/null; then
     echo "Detected old version of Docker. Do you want to keep it? (N/y), default is 'N' after 15 seconds ..."
     read -t 15 KEEP_OLD
-    if [[ "$KEEP_OLD" != "n" ]]; then
+    if [[ "$KEEP_OLD" != "y" ]]; then
         echo "Stopping existing running containers..."
         sudo docker ps -q | xargs -r sudo docker stop
         echo "Uninstalling old version of Docker..."
@@ -63,7 +63,7 @@ docker --version
 
 # Install Docker Compose
 echo "Installing Docker Compose..."
-DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 2)
+DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)
 
 # Download Docker Compose
 sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
@@ -91,7 +91,16 @@ docker-compose --version
 
 # Clean up: Remove the script and the current directory
 echo "Cleaning up..."
-SCRIPT_DIR=$(dirname "$(realpath "$0")") # 获取脚本的绝对路径
+SCRIPT_PATH=$(realpath "$0") # 获取脚本的绝对路径
+SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
+
+# Delete the script
+if [ -f "$SCRIPT_PATH" ]; then
+    echo "Deleting script: $SCRIPT_PATH"
+    rm "$SCRIPT_PATH"
+else
+    echo "Script $SCRIPT_PATH does not exist."
+fi
 
 # Check directory exists
 if [ -d "$SCRIPT_DIR" ]; then
@@ -101,5 +110,11 @@ if [ -d "$SCRIPT_DIR" ]; then
 else
     echo "Directory $SCRIPT_DIR does not exist."
 fi
+
+# Output final versions of Docker and Docker Compose
+echo "Final Docker version:"
+docker --version
+echo "Final Docker Compose version:"
+docker-compose --version
 
 echo "Docker and Docker Compose installation completed!"
