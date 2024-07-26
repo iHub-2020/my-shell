@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Author: Reyanmatic
+# Version: 1.1
+
 # Check and upgrade the current Debian or Ubuntu version
 echo "Checking the operating system version..."
 OS_VERSION=$(lsb_release -si)
@@ -54,6 +57,10 @@ fi
 
 echo "Docker installation successful!"
 
+# Display Docker Engine version
+echo "Docker Engine version:"
+docker --version
+
 # Install Docker Compose
 echo "Installing Docker Compose..."
 DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 2)
@@ -68,11 +75,15 @@ fi
 
 echo "Docker Compose installation successful!"
 
+# Display Docker Compose version
+echo "Docker Compose version:"
+docker-compose --version
+
 # Clean up: Remove the script and the current directory
 echo "Cleaning up..."
 SCRIPT_DIR=$(dirname "$(realpath "$0")") # 获取脚本的绝对路径
 
-# 检查目录是否存在
+# Check directory exists
 if [ -d "$SCRIPT_DIR" ]; then
     echo "Removing directory: $SCRIPT_DIR"
     cd "$SCRIPT_DIR" || exit
@@ -80,3 +91,5 @@ if [ -d "$SCRIPT_DIR" ]; then
 else
     echo "Directory $SCRIPT_DIR does not exist."
 fi
+
+echo "Docker and Docker Compose installation completed!"
