@@ -9,18 +9,23 @@
 
 ## 功能介绍
 
-自动检测并升级当前系统（支持 Debian 和 Ubuntu）  
-检查并可选卸载旧版本的 Docker  
-安装最新版本的 Docker Engine  
-安装最新版本的 Docker Compose  
+- 自动检测并升级当前系统（支持 Debian 和 Ubuntu）  
+- 检查并可选卸载旧版本的 Docker  
+- 安装最新版本的 Docker Engine  
+- 安装最新版本的 Docker Compose  
+- 安装完成后自动清除脚本
 
 ## 使用方法
 
-只需执行以下命令：
+你可以选择使用 `wget` 或 `curl` 来下载并执行脚本：
+
+### 使用 `wget`
 
 ```sh
 wget -O install_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh && chmod +x install_docker.sh && ./install_docker.sh
 
-```sh
+使用 curl
+sh
 
+复制
 curl -o install_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh && chmod +x install_docker.sh && ./install_docker.sh
