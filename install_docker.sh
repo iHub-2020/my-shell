@@ -64,7 +64,17 @@ docker --version
 # Install Docker Compose
 echo "Installing Docker Compose..."
 DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 2)
+
+# Download Docker Compose
 sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+# Verify the download was successful
+if [[ ! -s /usr/local/bin/docker-compose ]]; then
+    echo "Failed to download Docker Compose, exiting..."
+    exit 1
+fi
+
+# Make it executable
 sudo chmod +x /usr/local/bin/docker-compose
 
 # Check if Docker Compose installation was successful
