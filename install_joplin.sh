@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.2
+# Version: 2.4
 # Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
 
 # Function to install a package if not already installed
@@ -77,14 +77,6 @@ handle_existing_database imaticdb $POSTGRES_USER
 # Configure PostgreSQL
 sudo -i -u postgres psql -c "CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';"
 sudo -i -u postgres psql -c "CREATE DATABASE imaticdb WITH OWNER $POSTGRES_USER;"
-
-# Install Node.js and Yarn
-curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
-install_if_not_installed nodejs
-curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt-get update
-install_if_not_installed yarn
 
 # Handle existing Joplin directory
 handle_existing_directory /opt/joplin
@@ -230,3 +222,4 @@ if [[ "$DOMAIN" == "$IP" ]]; then
 else
     echo "Joplin Server installation completed! You can access it via https://$DOMAIN:22300"
 fi
+
