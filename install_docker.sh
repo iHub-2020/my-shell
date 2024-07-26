@@ -1,7 +1,36 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 1.9
+# Version: 2.0
+
+# Function to clean up script and directory
+cleanup() {
+    echo "Cleaning up..."
+    SCRIPT_PATH=$(realpath "$0") # 获取脚本的绝对路径
+    SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
+
+    # Delete the script
+    if [ -f "$SCRIPT_PATH" ]; then
+        echo "Deleting script: $SCRIPT_PATH"
+        rm "$SCRIPT_PATH"
+    else
+        echo "Script $SCRIPT_PATH does not exist."
+    fi
+
+    # Check directory exists
+    if [ -d "$SCRIPT_DIR" ]; then
+        echo "Removing directory: $SCRIPT_DIR"
+        cd "$SCRIPT_DIR" || exit
+        cd .. && rm -rf "$SCRIPT_DIR"
+    else
+        echo "Directory $SCRIPT_DIR does not exist."
+    fi
+
+    echo "Docker and Docker Compose installation completed!"
+}
+
+# Ensure cleanup is called on script exit
+trap cleanup EXIT
 
 # Check and upgrade the current Debian or Ubuntu version
 echo "Checking the operating system version..."
@@ -102,40 +131,14 @@ sudo chmod +x /usr/local/bin/docker-compose
 
 # Check if Docker Compose installation was successful
 if ! command -v docker-compose > /dev/null; then
-    echo "Docker Compose installation failed, exiting..."
-    exit 1
+    echo "Docker Compose installation failed, but continuing to cleanup..."
+else
+    echo "Docker Compose installation successful!"
+    # Display Docker Compose version
+    DOCKER_COMPOSE_VERSION_OUTPUT=$(docker-compose --version)
+    echo "Docker Compose version: $DOCKER_COMPOSE_VERSION_OUTPUT"
 fi
-
-echo "Docker Compose installation successful!"
-
-# Display Docker Compose version
-DOCKER_COMPOSE_VERSION_OUTPUT=$(docker-compose --version)
-echo "Docker Compose version: $DOCKER_COMPOSE_VERSION_OUTPUT"
 
 # Output final versions of Docker and Docker Compose
 echo "Final Docker version: $DOCKER_VERSION"
-echo "Final Docker Compose version: $DOCKER_COMPOSE_VERSION_OUTPUT"
-
-# Clean up: Remove the script and the current directory
-echo "Cleaning up..."
-SCRIPT_PATH=$(realpath "$0") # 获取脚本的绝对路径
-SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
-
-# Delete the script
-if [ -f "$SCRIPT_PATH" ]; then
-    echo "Deleting script: $SCRIPT_PATH"
-    rm "$SCRIPT_PATH"
-else
-    echo "Script $SCRIPT_PATH does not exist."
-fi
-
-# Check directory exists
-if [ -d "$SCRIPT_DIR" ]; then
-    echo "Removing directory: $SCRIPT_DIR"
-    cd "$SCRIPT_DIR" || exit
-    cd .. && rm -rf "$SCRIPT_DIR"
-else
-    echo "Directory $SCRIPT_DIR does not exist."
-fi
-
-echo "Docker and Docker Compose installation completed!"
+echo "Final Docker Compose version: ${DOCKER_COMPOSE_VERSION_OUTPUT:-"Not installed"}"
