@@ -61,6 +61,7 @@ echo "Docker Compose installation successful!"
 # Clean up: Remove the script and the current directory
 echo "Cleaning up..."
 SCRIPT_DIR=$(dirname "$0")
-rm -rf "$SCRIPT_DIR"
+cd "$SCRIPT_DIR" || exit
+cd .. && rm -rf "$SCRIPT_DIR"
 cd ~
 echo "Docker and Docker Compose installation completed!"
