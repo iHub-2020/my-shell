@@ -14,7 +14,7 @@
 ```sh
 git clone https://github.com/iHub-2020/docker-shell.git && cd docker-shell && chmod +x install_docker.sh && ./install_docker.sh
 
-功能
+功能：
 自动检测并升级当前系统（支持 Debian 和 Ubuntu）
 检查并可选卸载旧版本的 Docker
 安装最新版本的 Docker Engine
