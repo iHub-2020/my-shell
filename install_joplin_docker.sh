@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.6
+# Version: 2.7
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -34,12 +34,14 @@ prompt_with_default() {
     while [ $countdown -gt 0 ]; do
         read -t 1 -n 1 input_value
         if [ $? -eq 0 ]; then
+            printf "\n"
             echo "$input_value$(read -t 1 -n 1000)"  # Read remaining characters to the end of input
             return
         fi
-        echo -ne "\r$prompt_text (default: $default_value) [$countdown]: "
+        printf "\r$prompt_text (default: $default_value) [$countdown]: "
         countdown=$((countdown - 1))
     done
+    printf "\n"
     echo $default_value
 }
 
