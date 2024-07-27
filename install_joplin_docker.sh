@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.5
+# Version: 2.6
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -229,7 +229,8 @@ server {
 EOF
 
     # Enable Nginx configuration
-    sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/ || sudo rm /etc/nginx/sites-enabled/joplin && sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
+    sudo rm -f /etc/nginx/sites-enabled/joplin
+    sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
     sudo nginx -t && sudo systemctl restart nginx
 
     # Display success message with HTTPS URL
