@@ -111,10 +111,10 @@ sudo mkdir -p /opt/joplin
 sudo chown $(whoami):$(whoami) /opt/joplin
 cd /opt/joplin
 
-# Retry the clone operation up to 10 times if it fails
+# Retry the clone operation up to 3 times if it fails
 RETRY_COUNT=0
-MAX_RETRIES=10
-until git clone https://github.com/laurent22/joplin.git; do
+MAX_RETRIES=3
+until git clone https://gitee.com/laurent22/joplin.git; do
     RETRY_COUNT=$((RETRY_COUNT+1))
     if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
         echo "Failed to clone the repository after $MAX_RETRIES attempts."
