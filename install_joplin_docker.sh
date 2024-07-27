@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.7
+# Version: 1.8
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -114,69 +114,12 @@ volumes:
   db_data:
 EOF
 
-# Function to clone Git repository with retries and caching
-clone_with_retries() {
-    local repo_url=$1
-    local target_dir=$2
-    local retry_interval=$3
-    local max_retries=10
-    local retries=0
+# Pull the latest Joplin server Docker image
+echo "Pulling the latest Joplin server Docker image..."
+sudo docker pull joplin/server:latest
 
-    # Adjust Git configuration to handle large files and prevent timeouts
-    git config --global http.postBuffer 524288000
-    git config --global http.lowSpeedLimit 0
-    git config --global http.lowSpeedTime 999999
-    git config --global core.compression 0
-    git config --global http.maxRequests 10
-    git config --global fetch.parallel 10
-
-    while [ $retries -lt $max_retries ]; do
-        if [ -d "$target_dir/.git" ]; then
-            echo "Resuming existing clone in $target_dir..."
-            git -C $target_dir fetch origin --depth 1
-        else
-            echo "Cloning repository $repo_url..."
-            git clone --depth 1 --no-single-branch $repo_url $target_dir
-        fi
-
-        if [ $? -eq 0 ]; then
-            echo "Repository cloned successfully."
-            return 0
-        else
-            # Remove lock files if they exist
-            [ -f "$target_dir/.git/index.lock" ] && rm -f "$target_dir/.git/index.lock"
-            [ -f "$target_dir/.git/shallow.lock" ] && rm -f "$target_dir/.git/shallow.lock"
-            retries=$((retries + 1))
-            echo "Clone failed. Retrying in $retry_interval seconds... ($retries/$max_retries)"
-            sleep $retry_interval
-        fi
-    done
-
-    echo "Failed to clone repository after $max_retries attempts."
-    return 1
-}
-
-# Clone Joplin repository with retries and caching
-clone_with_retries "https://github.com/laurent22/joplin.git" "/opt/joplin/joplin" 20
-
-if [[ $? -ne 0 ]]; then
-    echo "Failed to clone Joplin repository. Exiting..."
-    exit 1
-fi
-
-# Debug: Print directory structure to verify correct path
-echo "Directory structure after cloning:"
-ls -R /opt/joplin/joplin
-
-# Check if the expected server directory exists
-if [ ! -d "/opt/joplin/joplin/packages/server" ]; then
-    echo "Directory /opt/joplin/joplin/packages/server does not exist. Please check the repository structure."
-    exit 1
-fi
-
-cd /opt/joplin/joplin/packages/server || { echo "Failed to change directory to joplin/packages/server"; exit 1; }
-npm install
-npm run build
+# Start the Docker containers using Docker Compose
+sudo docker-compose -f joplin-docker-compose.yml up -d
 
 if [[ "$APP_BASE_URL" == *":"* ]]; then
     # If the user entered an IP address, skip Nginx and SSL configuration
