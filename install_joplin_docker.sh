@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.5
+# Version: 1.6
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -126,6 +126,9 @@ clone_with_retries() {
     git config --global http.postBuffer 524288000
     git config --global http.lowSpeedLimit 0
     git config --global http.lowSpeedTime 999999
+    git config --global core.compression 0
+    git config --global http.maxRequests 10
+    git config --global fetch.parallel 10
 
     while [ $retries -lt $max_retries ]; do
         if [ -d "$target_dir/.git" ]; then
