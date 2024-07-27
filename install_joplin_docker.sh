@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.1
+# Version: 2.3
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -23,13 +23,20 @@ install_docker_compose_plugin() {
     fi
 }
 
-# Function to prompt user for input with a default value
+# Function to prompt user for input with a default value and countdown
 prompt_with_default() {
     local prompt_text=$1
     local default_value=$2
-    read -t 60 -p "$prompt_text (default: $default_value): " input_value
-    input_value=${input_value:-$default_value}
-    echo $input_value
+    local countdown=${3:-60}
+    while [ $countdown -gt 0 ]; do
+        read -t 1 -p "$prompt_text (default: $default_value) [$countdown]: " input_value
+        if [ -n "$input_value" ]; then
+            echo $input_value
+            return
+        fi
+        countdown=$((countdown - 1))
+    done
+    echo $default_value
 }
 
 # Ensure the script is run as root
@@ -75,14 +82,17 @@ sudo mkdir -p /opt/joplin
 cd /opt/joplin
 
 # Prompt user for PostgreSQL username and password
-POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "admin")
-POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "password")
+OLD_POSTGRES_USER=$(grep -oP '(?<=POSTGRES_USER: ).*' joplin-docker-compose.yml 2>/dev/null)
+OLD_POSTGRES_PASSWORD=$(grep -oP '(?<=POSTGRES_PASSWORD: ).*' joplin-docker-compose.yml 2>/dev/null)
+
+POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "${OLD_POSTGRES_USER:-admin}" 60)
+POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "${OLD_POSTGRES_PASSWORD:-password}" 60)
 
 # Set default port
 PORT=22300
 
 # Prompt user for IP address or domain
-APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100")
+APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100" 60)
 
 # Create Docker Compose configuration file
 NEW_DOCKER_COMPOSE=$(cat <<EOF
@@ -128,11 +138,13 @@ if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") jopl
     sudo docker compose -f joplin-docker-compose.yml down
     
     # Prompt to clean PostgreSQL data
-    read -t 15 -p "Do you want to keep the existing PostgreSQL data? (default: y) [y/n]: " KEEP_DB_DATA
-    KEEP_DB_DATA=${KEEP_DB_DATA:-y}
+    KEEP_DB_DATA=$(prompt_with_default "Do you want to keep the existing PostgreSQL data?" "y" 30)
     if [ "$KEEP_DB_DATA" == "n" ]; then
         sudo rm -rf /opt/joplin/db_data
         echo "Old PostgreSQL data removed."
+    elif [ "$POSTGRES_USER" != "$OLD_POSTGRES_USER" ] || [ "$POSTGRES_PASSWORD" != "$OLD_POSTGRES_PASSWORD" ]; then
+        echo "Old PostgreSQL data must be removed due to changes in username or password."
+        sudo rm -rf /opt/joplin/db_data
     else
         echo "Keeping existing PostgreSQL data."
     fi
@@ -165,20 +177,13 @@ if [[ "$APP_BASE_URL" == *.* ]]; then
     install_if_not_installed python3-certbot-nginx
 
     # Check existing SSL certificates
-    if [ -d "/etc/letsencrypt/live/$APP_BASE_URL" ]; then
-        echo "SSL certificates for $APP_BASE_URL already exist."
-        read -t 15 -p "Do you want to keep them? (default: y) [y/n]: " KEEP_CERTS
-        KEEP_CERTS=${KEEP_CERTS:-y}
-        if [ "$KEEP_CERTS" == "n" ]; then
-            sudo certbot delete --cert-name $APP_BASE_URL
-            echo "Old SSL certificates removed."
-            sudo certbot --nginx -d $APP_BASE_URL --non-interactive --agree-tos -m your-email@example.com
-        else
-            echo "Keeping existing SSL certificates."
-        fi
-    else
-        # Obtain new SSL certificates
+    KEEP_CERTS=$(prompt_with_default "SSL certificates for $APP_BASE_URL already exist. Do you want to keep them?" "y" 30)
+    if [ "$KEEP_CERTS" == "n" ]; then
+        sudo certbot delete --cert-name $APP_BASE_URL
+        echo "Old SSL certificates removed."
         sudo certbot --nginx -d $APP_BASE_URL --non-interactive --agree-tos -m your-email@example.com
+    else
+        echo "Keeping existing SSL certificates."
     fi
 
     # Configure Nginx
