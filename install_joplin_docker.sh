@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.3
+# Version: 1.4
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -130,10 +130,10 @@ clone_with_retries() {
     while [ $retries -lt $max_retries ]; do
         if [ -d "$target_dir/.git" ]; then
             echo "Resuming existing clone in $target_dir..."
-            git -C $target_dir fetch origin
+            git -C $target_dir fetch origin --depth 1
         else
             echo "Cloning repository $repo_url..."
-            git clone $repo_url $target_dir
+            git clone --depth 1 --no-single-branch $repo_url $target_dir
         fi
 
         if [ $? -eq 0 ]; then
