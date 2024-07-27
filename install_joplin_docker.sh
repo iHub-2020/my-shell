@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.0
+# Version: 3.1
 
 # Function to install a package if not already installed
 install_if_not_installed() {
