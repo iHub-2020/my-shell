@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.8
+# Version: 2.9
 
 # Function to clean up script and directory
 cleanup() {
