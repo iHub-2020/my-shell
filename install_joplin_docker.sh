@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.4
+# Version: 2.5
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -47,10 +47,10 @@ prompt_with_default() {
 check_network_environment() {
     if ping -c 1 google.com &> /dev/null; then
         echo "Using default NTP server."
-        sudo ntpdate pool.ntp.org
+        sudo ntpdate -u pool.ntp.org
     else
         echo "Using Alibaba NTP server."
-        sudo ntpdate time1.aliyun.com
+        sudo ntpdate -u time1.aliyun.com
     fi
 }
 
@@ -85,11 +85,12 @@ install_docker_compose_plugin
 # Check if UFW is installed and configure firewall
 install_if_not_installed ufw
 sudo ufw allow 22,80,443,22300/tcp
-sudo ufw enable
+sudo ufw --force enable
 sudo ufw status
 
 # Update NTP time synchronization server
 check_network_environment
+echo "NTP server setup completed."
 
 # Create Joplin directory
 sudo mkdir -p /opt/joplin
