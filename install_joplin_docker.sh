@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.6
+# Version: 1.7
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -143,6 +143,9 @@ clone_with_retries() {
             echo "Repository cloned successfully."
             return 0
         else
+            # Remove lock files if they exist
+            [ -f "$target_dir/.git/index.lock" ] && rm -f "$target_dir/.git/index.lock"
+            [ -f "$target_dir/.git/shallow.lock" ] && rm -f "$target_dir/.git/shallow.lock"
             retries=$((retries + 1))
             echo "Clone failed. Retrying in $retry_interval seconds... ($retries/$max_retries)"
             sleep $retry_interval
