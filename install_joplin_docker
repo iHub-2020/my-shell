@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.2
+# Version: 1.3
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -25,10 +25,21 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Check and remove old install_joplin_docker.sh if exists
+if [ -f "/root/install_joplin_docker.sh" ]; then
+    echo "Old install_joplin_docker.sh found. Removing..."
+    sudo rm /root/install_joplin_docker.sh
+fi
+
+# Download the latest install_joplin_docker.sh
+echo "Downloading the latest install_joplin_docker.sh..."
+wget -O /root/install_joplin_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh
+chmod +x /root/install_joplin_docker.sh
+
 # Check if Docker is installed
 if ! command -v docker &> /dev/null; then
     echo "Docker is not installed. Installing Docker..."
-    wget -O install_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh && chmod +x install_docker.sh && ./install_docker.sh
+    /root/install_joplin_docker.sh
 else
     echo "Docker is already installed."
 fi
