@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 3.3
+# Version: 3.6
 
 # Function to clean up script and directory
 cleanup() {
@@ -119,14 +119,17 @@ fi
 
 # Add Docker's official GPG key
 echo "Adding Docker's official GPG key..."
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo tee /usr/share/keyrings/docker-archive-keyring.gpg > /dev/null
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
 # Set up the Docker repository
 echo "Setting up the Docker repository..."
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# Update the package list
+# Clean old GPG errors and update the package list
+echo "Cleaning old GPG errors..."
+sudo apt-get clean
 wait_for_apt
+echo "Updating package list..."
 sudo apt-get update
 
 # Install Docker using Docker's official installation script
