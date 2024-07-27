@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 3.0
+# Version: 3.1
 
 # Function to clean up script and directory
 cleanup() {
@@ -52,6 +52,17 @@ echo "Current system: $OS_VERSION"
 echo "Updating the system..."
 wait_for_apt
 sudo apt-get update && sudo apt-get upgrade -y
+
+# Ensure gnupg is installed
+if ! command -v gpg > /dev/null; then
+    echo "gnupg is not installed. Installing gnupg..."
+
+    # Check for running apt processes
+    wait_for_apt
+
+    # Install gnupg
+    sudo apt-get install -y gnupg
+fi
 
 # Ensure git is installed
 if ! command -v git > /dev/null; then
