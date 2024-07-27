@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.9
+# Version: 3.0
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -63,7 +63,7 @@ handle_existing_joplin() {
 }
 
 # Ensure the script is run as root
-if [ "$EUID" -ne 0 ];then
+if [ "$EUID" -ne 0 ]; then
     echo "Please run as root"
     exit 1
 fi
@@ -77,6 +77,9 @@ install_if_not_installed wget
 install_if_not_installed gnupg2
 install_if_not_installed software-properties-common
 install_if_not_installed git
+
+# Adjust Git's HTTP buffer size
+git config --global http.postBuffer 104857600
 
 # Add PostgreSQL official repository and install PostgreSQL
 wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
