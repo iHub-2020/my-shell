@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.4
+# Version: 1.5
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -155,6 +155,16 @@ clone_with_retries "https://github.com/laurent22/joplin.git" "/opt/joplin/joplin
 
 if [[ $? -ne 0 ]]; then
     echo "Failed to clone Joplin repository. Exiting..."
+    exit 1
+fi
+
+# Debug: Print directory structure to verify correct path
+echo "Directory structure after cloning:"
+ls -R /opt/joplin/joplin
+
+# Check if the expected server directory exists
+if [ ! -d "/opt/joplin/joplin/packages/server" ]; then
+    echo "Directory /opt/joplin/joplin/packages/server does not exist. Please check the repository structure."
     exit 1
 fi
 
