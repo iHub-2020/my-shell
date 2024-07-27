@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.9
+# Version: 2.1
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -78,24 +78,14 @@ cd /opt/joplin
 POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "admin")
 POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "password")
 
-# Check existing PostgreSQL data
-if [ -d "db_data" ]; then
-    echo "PostgreSQL data directory already exists."
-    read -t 15 -p "Do you want to keep it? (default: y) [y/n]: " KEEP_DB_DATA
-    KEEP_DB_DATA=${KEEP_DB_DATA:-y}
-    if [ "$KEEP_DB_DATA" == "n" ]; then
-        sudo rm -rf db_data
-        echo "Old PostgreSQL data removed."
-    else
-        echo "Keeping existing PostgreSQL data."
-    fi
-fi
+# Set default port
+PORT=22300
 
 # Prompt user for IP address or domain
-APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.188:22300")
+APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100")
 
 # Create Docker Compose configuration file
-sudo tee joplin-docker-compose.yml > /dev/null <<EOF
+NEW_DOCKER_COMPOSE=$(cat <<EOF
 version: '3.8'
 
 services:
@@ -113,9 +103,9 @@ services:
     image: joplin/server:latest
     restart: unless-stopped
     ports:
-      - "22300:22300"
+      - "$PORT:$PORT"
     environment:
-      APP_BASE_URL: "http://$APP_BASE_URL"
+      APP_BASE_URL: "http://$APP_BASE_URL:$PORT"
       DB_CLIENT: pg
       POSTGRES_PASSWORD: $POSTGRES_PASSWORD
       POSTGRES_DATABASE: joplin
@@ -129,6 +119,29 @@ services:
 volumes:
   db_data:
 EOF
+)
+
+# Check if existing Docker Compose file is different from the new one
+if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") joplin-docker-compose.yml > /dev/null; then
+    echo "Docker Compose configuration has changed."
+    # Stop existing Docker containers
+    sudo docker compose -f joplin-docker-compose.yml down
+    
+    # Prompt to clean PostgreSQL data
+    read -t 15 -p "Do you want to keep the existing PostgreSQL data? (default: y) [y/n]: " KEEP_DB_DATA
+    KEEP_DB_DATA=${KEEP_DB_DATA:-y}
+    if [ "$KEEP_DB_DATA" == "n" ]; then
+        sudo rm -rf /opt/joplin/db_data
+        echo "Old PostgreSQL data removed."
+    else
+        echo "Keeping existing PostgreSQL data."
+    fi
+    
+    # Update Docker Compose file
+    echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
+else
+    echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
+fi
 
 # Pull the latest Joplin server Docker image
 echo "Pulling the latest Joplin server Docker image..."
@@ -137,10 +150,8 @@ sudo docker pull joplin/server:latest
 # Start the Docker containers using Docker Compose
 sudo docker compose -f joplin-docker-compose.yml up -d
 
-if [[ "$APP_BASE_URL" == *":"* ]]; then
-    # If the user entered an IP address, skip Nginx and SSL configuration
-    echo "Skipping Nginx and SSL configuration as the input is an IP address."
-else
+if [[ "$APP_BASE_URL" == *.* ]]; then
+    # If the user entered a domain, configure Nginx and SSL
     # Check if Nginx is installed
     if ! command -v nginx &> /dev/null; then
         echo "Nginx is not installed. Installing Nginx..."
@@ -188,7 +199,7 @@ server {
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     location / {
-        proxy_pass http://localhost:22300;
+        proxy_pass http://localhost:$PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -200,6 +211,12 @@ EOF
     # Enable Nginx configuration
     sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/ || sudo rm /etc/nginx/sites-enabled/joplin && sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
     sudo nginx -t && sudo systemctl restart nginx
+
+    # Display success message with HTTPS URL
+    echo "Joplin Server installation completed! You can access it via https://$APP_BASE_URL"
+else
+    # Display success message with HTTP URL
+    echo "Joplin Server installation completed! You can access it via http://$APP_BASE_URL:$PORT"
 fi
 
 # Check service status
@@ -207,5 +224,3 @@ sudo docker compose -f joplin-docker-compose.yml ps
 
 # Check logs
 sudo docker compose -f joplin-docker-compose.yml logs
-
-echo "Joplin Server installation completed! You can access it via http://$APP_BASE_URL"
