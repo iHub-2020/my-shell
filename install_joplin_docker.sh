@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.3
+# Version: 2.4
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -28,15 +28,30 @@ prompt_with_default() {
     local prompt_text=$1
     local default_value=$2
     local countdown=${3:-60}
+    local input_value
+
+    echo -n "$prompt_text (default: $default_value): "
     while [ $countdown -gt 0 ]; do
-        read -t 1 -p "$prompt_text (default: $default_value) [$countdown]: " input_value
-        if [ -n "$input_value" ]; then
-            echo $input_value
+        read -t 1 -n 1 input_value
+        if [ $? -eq 0 ]; then
+            echo "$input_value$(read -t 1 -n 1000)"  # Read remaining characters to the end of input
             return
         fi
+        echo -ne "\r$prompt_text (default: $default_value) [$countdown]: "
         countdown=$((countdown - 1))
     done
     echo $default_value
+}
+
+# Function to check network environment
+check_network_environment() {
+    if ping -c 1 google.com &> /dev/null; then
+        echo "Using default NTP server."
+        sudo ntpdate pool.ntp.org
+    else
+        echo "Using Alibaba NTP server."
+        sudo ntpdate time1.aliyun.com
+    fi
 }
 
 # Ensure the script is run as root
@@ -74,8 +89,7 @@ sudo ufw enable
 sudo ufw status
 
 # Update NTP time synchronization server
-install_if_not_installed ntpdate
-sudo ntpdate time1.aliyun.com
+check_network_environment
 
 # Create Joplin directory
 sudo mkdir -p /opt/joplin
