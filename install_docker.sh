@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.7
+# Version: 2.8
 
 # Function to clean up script and directory
 cleanup() {
@@ -96,26 +96,10 @@ else
     echo "No old version of Docker detected."
 fi
 
-# Install Docker
-echo "Installing Docker..."
-wait_for_apt
-sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-
-# Determine the correct Docker repository based on OS
-if [[ "$OS_VERSION" == "Ubuntu" ]]; then
-    echo "Adding Docker's official GPG key and repository for Ubuntu..."
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-    echo "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-elif [[ "$OS_VERSION" == "Debian" ]]; then
-    echo "Adding Docker's official GPG key and repository for Debian..."
-    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
-    echo "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-fi
-
-wait_for_apt
-sudo apt-get update
-wait_for_apt
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+# Install Docker using Docker's official installation script
+echo "Installing Docker using Docker's official installation script..."
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
 
 # Check if Docker installation was successful
 if ! command -v docker > /dev/null; then
