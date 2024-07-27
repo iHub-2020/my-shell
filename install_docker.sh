@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.4
+# Version: 2.7
 
 # Function to clean up script and directory
 cleanup() {
@@ -18,12 +18,12 @@ cleanup() {
     fi
 
     # Check directory exists
-    if [ -d "$SCRIPT_DIR" ]; then
+    if [ -d "$SCRIPT_DIR" ] && [ "$SCRIPT_DIR" != "$HOME" ]; then
         echo "Removing directory: $SCRIPT_DIR"
         cd "$SCRIPT_DIR" || exit
         cd .. && rm -rf "$SCRIPT_DIR"
     else
-        echo "Directory $SCRIPT_DIR does not exist."
+        echo "Directory $SCRIPT_DIR does not exist or is the home directory."
     fi
 
     echo "Docker and Docker Compose installation completed!"
@@ -115,7 +115,7 @@ fi
 wait_for_apt
 sudo apt-get update
 wait_for_apt
-sudo apt-get install -y docker-ce
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
 # Check if Docker installation was successful
 if ! command -v docker > /dev/null; then
