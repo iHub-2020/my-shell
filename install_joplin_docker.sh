@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.7
+# Version: 2.8
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -23,26 +23,13 @@ install_docker_compose_plugin() {
     fi
 }
 
-# Function to prompt user for input with a default value and countdown
+# Function to prompt user for input with a default value
 prompt_with_default() {
     local prompt_text=$1
     local default_value=$2
-    local countdown=${3:-60}
-    local input_value
-
-    echo -n "$prompt_text (default: $default_value): "
-    while [ $countdown -gt 0 ]; do
-        read -t 1 -n 1 input_value
-        if [ $? -eq 0 ]; then
-            printf "\n"
-            echo "$input_value$(read -t 1 -n 1000)"  # Read remaining characters to the end of input
-            return
-        fi
-        printf "\r$prompt_text (default: $default_value) [$countdown]: "
-        countdown=$((countdown - 1))
-    done
-    printf "\n"
-    echo $default_value
+    read -p "$prompt_text (default: $default_value): " input_value
+    input_value=${input_value:-$default_value}
+    echo $input_value
 }
 
 # Function to check network environment
@@ -102,14 +89,14 @@ cd /opt/joplin
 OLD_POSTGRES_USER=$(grep -oP '(?<=POSTGRES_USER: ).*' joplin-docker-compose.yml 2>/dev/null)
 OLD_POSTGRES_PASSWORD=$(grep -oP '(?<=POSTGRES_PASSWORD: ).*' joplin-docker-compose.yml 2>/dev/null)
 
-POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "${OLD_POSTGRES_USER:-admin}" 60)
-POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "${OLD_POSTGRES_PASSWORD:-password}" 60)
+POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "${OLD_POSTGRES_USER:-admin}")
+POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "${OLD_POSTGRES_PASSWORD:-password}")
 
 # Set default port
 PORT=22300
 
 # Prompt user for IP address or domain
-APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100" 60)
+APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100")
 
 # Create Docker Compose configuration file
 NEW_DOCKER_COMPOSE=$(cat <<EOF
@@ -155,7 +142,7 @@ if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") jopl
     sudo docker compose -f joplin-docker-compose.yml down
     
     # Prompt to clean PostgreSQL data
-    KEEP_DB_DATA=$(prompt_with_default "Do you want to keep the existing PostgreSQL data?" "y" 30)
+    KEEP_DB_DATA=$(prompt_with_default "Do you want to keep the existing PostgreSQL data?" "y")
     if [ "$KEEP_DB_DATA" == "n" ]; then
         sudo rm -rf /opt/joplin/db_data
         echo "Old PostgreSQL data removed."
@@ -194,7 +181,7 @@ if [[ "$APP_BASE_URL" == *.* ]]; then
     install_if_not_installed python3-certbot-nginx
 
     # Check existing SSL certificates
-    KEEP_CERTS=$(prompt_with_default "SSL certificates for $APP_BASE_URL already exist. Do you want to keep them?" "y" 30)
+    KEEP_CERTS=$(prompt_with_default "SSL certificates for $APP_BASE_URL already exist. Do you want to keep them?" "y")
     if [ "$KEEP_CERTS" == "n" ]; then
         sudo certbot delete --cert-name $APP_BASE_URL
         echo "Old SSL certificates removed."
