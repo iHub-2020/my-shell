@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.2
+# Version: 3.3
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -29,7 +29,7 @@ prompt_with_default() {
     local default_value=$2
     read -p "$prompt_text (default: $default_value): " input_value
     input_value=${input_value:-$default_value}
-    echo $input_value
+    echo "$input_value"
 }
 
 # Function to check and configure UFW
@@ -56,17 +56,6 @@ configure_ufw() {
     fi
     sudo ufw status
 }
-
-# Function to check network environment (currently commented out)
-# check_network_environment() {
-#     if ping -c 1 google.com &> /dev/null; then
-#         echo "Using default NTP server."
-#         sudo ntpdate -u pool.ntp.org
-#     else
-#         echo "Using Alibaba NTP server."
-#         sudo ntpdate -u time1.aliyun.com
-#     fi
-# }
 
 # Ensure the script is run as root
 if [ "$EUID" -ne 0 ]; then
@@ -98,10 +87,6 @@ install_docker_compose_plugin
 
 # Configure UFW
 configure_ufw
-
-# Update NTP time synchronization server (currently commented out)
-# check_network_environment
-# echo "NTP server setup completed."
 
 # Create Joplin directory
 sudo mkdir -p /opt/joplin
