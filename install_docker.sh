@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 3.1
+# Version: 3.3
 
 # Function to clean up script and directory
 cleanup() {
@@ -53,7 +53,7 @@ echo "Updating the system..."
 wait_for_apt
 sudo apt-get update && sudo apt-get upgrade -y
 
-# Ensure gnupg is installed
+# Ensure gnupg and curl are installed
 if ! command -v gpg > /dev/null; then
     echo "gnupg is not installed. Installing gnupg..."
 
@@ -62,6 +62,16 @@ if ! command -v gpg > /dev/null; then
 
     # Install gnupg
     sudo apt-get install -y gnupg
+fi
+
+if ! command -v curl > /dev/null; then
+    echo "curl is not installed. Installing curl..."
+
+    # Check for running apt processes
+    wait_for_apt
+
+    # Install curl
+    sudo apt-get install -y curl
 fi
 
 # Ensure git is installed
@@ -109,7 +119,7 @@ fi
 
 # Add Docker's official GPG key
 echo "Adding Docker's official GPG key..."
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo tee /usr/share/keyrings/docker-archive-keyring.gpg > /dev/null
 
 # Set up the Docker repository
 echo "Setting up the Docker repository..."
