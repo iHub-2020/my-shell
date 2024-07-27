@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 2.9
+# Version: 3.0
 
 # Function to clean up script and directory
 cleanup() {
@@ -95,6 +95,18 @@ if command -v docker > /dev/null; then
 else
     echo "No old version of Docker detected."
 fi
+
+# Add Docker's official GPG key
+echo "Adding Docker's official GPG key..."
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+# Set up the Docker repository
+echo "Setting up the Docker repository..."
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Update the package list
+wait_for_apt
+sudo apt-get update
 
 # Install Docker using Docker's official installation script
 echo "Installing Docker using Docker's official installation script..."
