@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.7
+# Version: 3.6
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -93,9 +93,11 @@ sudo mkdir -p /opt/joplin
 cd /opt/joplin
 
 # Prompt user for PostgreSQL username and password
-# Always use default values for first prompt
-POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "admin")
-POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "password")
+OLD_POSTGRES_USER=$(grep -Po '(?<=POSTGRES_USER: ).*' joplin-docker-compose.yml 2>/dev/null | head -n 1)
+OLD_POSTGRES_PASSWORD=$(grep -Po '(?<=POSTGRES_PASSWORD: ).*' joplin-docker-compose.yml 2>/dev/null | head -n 1)
+
+POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "${OLD_POSTGRES_USER:-admin}")
+POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "${OLD_POSTGRES_PASSWORD:-password}")
 
 # Set default port
 PORT=22300
@@ -151,6 +153,11 @@ if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") jopl
     if [ "$KEEP_DB_DATA" == "n" ]; then
         sudo rm -rf /opt/joplin/db_data
         echo "Old PostgreSQL data removed."
+    elif [ "$POSTGRES_USER" != "$OLD_POSTGRES_USER" ] || [ "$POSTGRES_PASSWORD" != "$OLD_POSTGRES_PASSWORD" ]; then
+        echo "Old PostgreSQL data must be removed due to changes in username or password."
+        sudo rm -rf /opt/joplin/db_data
+    else
+        echo "Keeping existing PostgreSQL data."
     fi
     
     # Update Docker Compose file
