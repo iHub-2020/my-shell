@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.0
+# Version: 3.1
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -78,8 +78,10 @@ install_if_not_installed gnupg2
 install_if_not_installed software-properties-common
 install_if_not_installed git
 
-# Adjust Git's HTTP buffer size
+# Adjust Git's HTTP buffer size and timeout settings
 git config --global http.postBuffer 104857600
+git config --global http.lowSpeedLimit 0
+git config --global http.lowSpeedTime 999999
 
 # Add PostgreSQL official repository and install PostgreSQL
 wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
@@ -116,7 +118,7 @@ cd /opt/joplin
 
 # Infinite retry the clone operation until it succeeds
 while true; do
-    if git clone https://gitee.com/laurent22/joplin.git; then
+    if git clone https://github.com/laurent22/joplin.git; then
         break
     else
         echo "Cloning failed. Retrying in 5 seconds..."
@@ -187,7 +189,7 @@ else
     sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m your-email@example.com
 
     # Check if SSL certificates were successfully issued
-    if [ -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem ]; then
+    if [ -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem]; then
         sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
 server {
     listen 80;
