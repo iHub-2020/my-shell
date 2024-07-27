@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.5
+# Version: 2.6
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -62,8 +62,14 @@ handle_existing_joplin() {
     fi
 }
 
+# Ensure the script is run as root
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root"
+    exit 1
+fi
+
 # Update system package list and upgrade existing packages
-sudo apt-get update && sudo apt-get upgrade -y
+apt-get update && apt-get upgrade -y
 
 # Install necessary packages
 install_if_not_installed curl
@@ -73,9 +79,9 @@ install_if_not_installed software-properties-common
 install_if_not_installed git
 
 # Add PostgreSQL official repository and install PostgreSQL
-wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-sudo apt-get update
+wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+apt-get update
 install_if_not_installed postgresql
 install_if_not_installed postgresql-contrib
 
@@ -104,7 +110,20 @@ install_if_not_installed git
 sudo mkdir -p /opt/joplin
 sudo chown $(whoami):$(whoami) /opt/joplin
 cd /opt/joplin
-git clone https://github.com/laurent22/joplin.git
+
+# Retry the clone operation up to 10 times if it fails
+RETRY_COUNT=0
+MAX_RETRIES=10
+until git clone https://github.com/laurent22/joplin.git; do
+    RETRY_COUNT=$((RETRY_COUNT+1))
+    if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+        echo "Failed to clone the repository after $MAX_RETRIES attempts."
+        exit 1
+    fi
+    echo "Retrying clone operation... ($RETRY_COUNT/$MAX_RETRIES)"
+    sleep 5
+done
+
 cd joplin/packages/server || { echo "Failed to change directory to joplin/packages/server"; exit 1; }
 npm install
 npm run build
