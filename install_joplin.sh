@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.7
+# Version: 2.8
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -111,16 +111,9 @@ sudo mkdir -p /opt/joplin
 sudo chown $(whoami):$(whoami) /opt/joplin
 cd /opt/joplin
 
-# Retry the clone operation up to 3 times if it fails
-RETRY_COUNT=0
-MAX_RETRIES=3
+# Infinite retry the clone operation until it succeeds
 until git clone https://gitee.com/laurent22/joplin.git; do
-    RETRY_COUNT=$((RETRY_COUNT+1))
-    if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
-        echo "Failed to clone the repository after $MAX_RETRIES attempts."
-        exit 1
-    fi
-    echo "Retrying clone operation... ($RETRY_COUNT/$MAX_RETRIES)"
+    echo "Cloning failed. Retrying in 5 seconds..."
     sleep 5
 done
 
