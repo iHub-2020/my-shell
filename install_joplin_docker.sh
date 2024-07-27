@@ -1,12 +1,25 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.8
+# Version: 1.9
 
 # Function to install a package if not already installed
 install_if_not_installed() {
     if ! dpkg -l | grep -q "$1"; then
         sudo apt-get install -y "$1"
+    fi
+}
+
+# Function to install Docker Compose plugin if not already installed
+install_docker_compose_plugin() {
+    if ! docker compose version &> /dev/null; then
+        echo "Docker Compose plugin not found. Installing..."
+        DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+        mkdir -p $DOCKER_CONFIG/cli-plugins
+        curl -SL https://github.com/docker/compose/releases/download/v2.11.2/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose
+        chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+    else
+        echo "Docker Compose plugin is already installed."
     fi
 }
 
@@ -43,6 +56,9 @@ if ! command -v docker &> /dev/null; then
 else
     echo "Docker is already installed."
 fi
+
+# Install Docker Compose plugin
+install_docker_compose_plugin
 
 # Check if UFW is installed and configure firewall
 install_if_not_installed ufw
@@ -119,7 +135,7 @@ echo "Pulling the latest Joplin server Docker image..."
 sudo docker pull joplin/server:latest
 
 # Start the Docker containers using Docker Compose
-sudo docker-compose -f joplin-docker-compose.yml up -d
+sudo docker compose -f joplin-docker-compose.yml up -d
 
 if [[ "$APP_BASE_URL" == *":"* ]]; then
     # If the user entered an IP address, skip Nginx and SSL configuration
@@ -187,9 +203,9 @@ EOF
 fi
 
 # Check service status
-sudo docker-compose -f joplin-docker-compose.yml ps
+sudo docker compose -f joplin-docker-compose.yml ps
 
 # Check logs
-sudo docker-compose -f joplin-docker-compose.yml logs
+sudo docker compose -f joplin-docker-compose.yml logs
 
 echo "Joplin Server installation completed! You can access it via http://$APP_BASE_URL"
