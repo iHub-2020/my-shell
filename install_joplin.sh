@@ -2,7 +2,6 @@
 
 # Author: reyanmatic
 # Version: 2.5
-# Project URL: https://github.com/iHub-2020/my-shell/install_joplin.sh
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -46,6 +45,23 @@ handle_existing_database() {
     fi
 }
 
+# Function to prompt user and handle existing Joplin installation
+handle_existing_joplin() {
+    local dir=$1
+    if [ -d "$dir" ]; then
+        echo "Joplin directory $dir already exists."
+        read -t 15 -p "Do you want to upgrade it? (default: y) [y/n]: " UPGRADE_JOPLIN
+        UPGRADE_JOPLIN=${UPGRADE_JOPLIN:-y}
+        if [ "$UPGRADE_JOPLIN" == "n" ]; then
+            echo "Keeping existing Joplin installation."
+            exit 0
+        else
+            echo "Upgrading Joplin installation."
+            sudo rm -rf "$dir"
+        fi
+    fi
+}
+
 # Update system package list and upgrade existing packages
 sudo apt-get update && sudo apt-get upgrade -y
 
@@ -78,8 +94,8 @@ handle_existing_database imaticdb $POSTGRES_USER
 sudo -i -u postgres psql -c "CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';"
 sudo -i -u postgres psql -c "CREATE DATABASE imaticdb WITH OWNER $POSTGRES_USER;"
 
-# Handle existing Joplin directory
-handle_existing_directory /opt/joplin
+# Handle existing Joplin installation
+handle_existing_joplin /opt/joplin
 
 # Ensure git is installed before cloning the repository
 install_if_not_installed git
@@ -90,8 +106,8 @@ sudo chown $(whoami):$(whoami) /opt/joplin
 cd /opt/joplin
 git clone https://github.com/laurent22/joplin.git
 cd joplin/packages/server || { echo "Failed to change directory to joplin/packages/server"; exit 1; }
-yarn install
-yarn run build
+npm install
+npm run build
 
 # Create Joplin server service file
 sudo tee /etc/systemd/system/joplin-server.service > /dev/null <<EOF
@@ -103,7 +119,7 @@ After=network.target postgresql.service
 Type=simple
 User=$USER
 WorkingDirectory=/opt/joplin/joplin/packages/server
-ExecStart=/usr/bin/yarn start
+ExecStart=/usr/bin/npm start
 Restart=always
 
 [Install]
@@ -116,8 +132,7 @@ sudo systemctl start joplin-server
 sudo systemctl enable joplin-server
 
 # Prompt for domain or local IP
-echo "Enter the domain or local IP to bind (leave empty to use local IP):"
-read -t 60 -p "Domain or IP (default: local IP): " DOMAIN
+read -t 60 -p "Enter the domain or local IP to bind (default: local IP): " DOMAIN
 
 if [ -z "$DOMAIN" ]; then
     IP=$(hostname -I | awk '{print $1}')
@@ -225,4 +240,3 @@ if [[ "$DOMAIN" == "$IP" ]]; then
 else
     echo "Joplin Server installation completed! You can access it via https://$DOMAIN:22300"
 fi
-
