@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 2.8
+# Version: 2.9
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -63,7 +63,7 @@ handle_existing_joplin() {
 }
 
 # Ensure the script is run as root
-if [ "$EUID" -ne 0 ]; then
+if [ "$EUID" -ne 0 ];then
     echo "Please run as root"
     exit 1
 fi
@@ -112,9 +112,13 @@ sudo chown $(whoami):$(whoami) /opt/joplin
 cd /opt/joplin
 
 # Infinite retry the clone operation until it succeeds
-until git clone https://gitee.com/laurent22/joplin.git; do
-    echo "Cloning failed. Retrying in 5 seconds..."
-    sleep 5
+while true; do
+    if git clone https://gitee.com/laurent22/joplin.git; then
+        break
+    else
+        echo "Cloning failed. Retrying in 5 seconds..."
+        sleep 5
+    fi
 done
 
 cd joplin/packages/server || { echo "Failed to change directory to joplin/packages/server"; exit 1; }
