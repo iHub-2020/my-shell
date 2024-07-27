@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.4
+# Version: 3.5
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -174,7 +174,7 @@ sudo docker pull joplin/server:latest
 sudo docker compose -f joplin-docker-compose.yml up -d
 
 # Check if the APP_BASE_URL is an IP address or a domain
-if [[ "$APP_BASE_URL" == *.* ]]; then
+if [[ "$APP_BASE_URL" == *.* && ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     # If the user entered a domain, configure Nginx and SSL
     # Check if Nginx is installed
     if ! command -v nginx &> /dev/null; then
