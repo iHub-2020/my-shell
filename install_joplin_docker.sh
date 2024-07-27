@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.5
+# Version: 3.6
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -93,8 +93,8 @@ sudo mkdir -p /opt/joplin
 cd /opt/joplin
 
 # Prompt user for PostgreSQL username and password
-OLD_POSTGRES_USER=$(grep -oP '(?<=POSTGRES_USER: ).*' joplin-docker-compose.yml 2>/dev/null)
-OLD_POSTGRES_PASSWORD=$(grep -oP '(?<=POSTGRES_PASSWORD: ).*' joplin-docker-compose.yml 2>/dev/null)
+OLD_POSTGRES_USER=$(grep -Po '(?<=POSTGRES_USER: ).*' joplin-docker-compose.yml 2>/dev/null | head -n 1)
+OLD_POSTGRES_PASSWORD=$(grep -Po '(?<=POSTGRES_PASSWORD: ).*' joplin-docker-compose.yml 2>/dev/null | head -n 1)
 
 POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "${OLD_POSTGRES_USER:-admin}")
 POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "${OLD_POSTGRES_PASSWORD:-password}")
@@ -174,7 +174,7 @@ sudo docker pull joplin/server:latest
 sudo docker compose -f joplin-docker-compose.yml up -d
 
 # Check if the APP_BASE_URL is an IP address or a domain
-if [[ "$APP_BASE_URL" == *.* && ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     # If the user entered a domain, configure Nginx and SSL
     # Check if Nginx is installed
     if ! command -v nginx &> /dev/null; then
