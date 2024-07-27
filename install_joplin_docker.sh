@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.1
+# Version: 3.2
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -30,6 +30,31 @@ prompt_with_default() {
     read -p "$prompt_text (default: $default_value): " input_value
     input_value=${input_value:-$default_value}
     echo $input_value
+}
+
+# Function to check and configure UFW
+configure_ufw() {
+    if ! sudo ufw status &> /dev/null; then
+        install_if_not_installed ufw
+        sudo ufw allow 22,80,443,22300/tcp
+        sudo ufw --force enable
+    else
+        echo "UFW is already installed."
+        if ! sudo ufw status | grep -q "22/tcp"; then
+            sudo ufw allow 22/tcp
+        fi
+        if ! sudo ufw status | grep -q "80/tcp"; then
+            sudo ufw allow 80/tcp
+        fi
+        if ! sudo ufw status | grep -q "443/tcp"; then
+            sudo ufw allow 443/tcp
+        fi
+        if ! sudo ufw status | grep -q "22300/tcp"; then
+            sudo ufw allow 22300/tcp
+        fi
+        sudo ufw reload
+    fi
+    sudo ufw status
 }
 
 # Function to check network environment (currently commented out)
@@ -71,11 +96,8 @@ fi
 # Install Docker Compose plugin
 install_docker_compose_plugin
 
-# Check if UFW is installed and configure firewall
-install_if_not_installed ufw
-sudo ufw allow 22,80,443,22300/tcp
-sudo ufw --force enable
-sudo ufw status
+# Configure UFW
+configure_ufw
 
 # Update NTP time synchronization server (currently commented out)
 # check_network_environment
