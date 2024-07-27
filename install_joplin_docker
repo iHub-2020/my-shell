@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 1.1
+# Version: 1.2
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -65,7 +65,7 @@ if [ -d "db_data" ]; then
 fi
 
 # Prompt user for IP address or domain
-APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100:22300")
+APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.188:22300")
 
 # Create Docker Compose configuration file
 sudo tee joplin-docker-compose.yml > /dev/null <<EOF
@@ -103,8 +103,53 @@ volumes:
   db_data:
 EOF
 
-# Start the Docker containers
-sudo docker-compose -f joplin-docker-compose.yml up -d
+# Function to clone Git repository with retries and caching
+clone_with_retries() {
+    local repo_url=$1
+    local target_dir=$2
+    local retry_interval=$3
+    local max_retries=10
+    local retries=0
+
+    # Adjust Git configuration to handle large files and prevent timeouts
+    git config --global http.postBuffer 524288000
+    git config --global http.lowSpeedLimit 0
+    git config --global http.lowSpeedTime 999999
+
+    while [ $retries -lt $max_retries ]; do
+        if [ -d "$target_dir/.git" ]; then
+            echo "Resuming existing clone in $target_dir..."
+            git -C $target_dir fetch origin
+        else
+            echo "Cloning repository $repo_url..."
+            git clone $repo_url $target_dir
+        fi
+
+        if [ $? -eq 0 ]; then
+            echo "Repository cloned successfully."
+            return 0
+        else
+            retries=$((retries + 1))
+            echo "Clone failed. Retrying in $retry_interval seconds... ($retries/$max_retries)"
+            sleep $retry_interval
+        fi
+    done
+
+    echo "Failed to clone repository after $max_retries attempts."
+    return 1
+}
+
+# Clone Joplin repository with retries and caching
+clone_with_retries "https://github.com/laurent22/joplin.git" "/opt/joplin/joplin" 20
+
+if [[ $? -ne 0 ]]; then
+    echo "Failed to clone Joplin repository. Exiting..."
+    exit 1
+fi
+
+cd /opt/joplin/joplin/packages/server || { echo "Failed to change directory to joplin/packages/server"; exit 1; }
+npm install
+npm run build
 
 if [[ "$APP_BASE_URL" == *":"* ]]; then
     # If the user entered an IP address, skip Nginx and SSL configuration
