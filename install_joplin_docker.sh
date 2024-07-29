@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.0
+# Version: 4.1
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -194,12 +194,20 @@ configure_ufw
 sudo mkdir -p /opt/joplin
 cd /opt/joplin
 
-# Always use default values for first prompt
-POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "admin")
-POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "password")
+# Check if PostgreSQL data volume exists
+if sudo docker volume ls | grep -q "db_data"; then
+    handle_postgres_db
+else
+    echo "No existing PostgreSQL database found. Creating a new one..."
+    POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "admin")
+    POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "password")
+    sudo docker volume create joplin_db_data
+    sudo docker run --rm -v joplin_db_data:/var/lib/postgresql/data busybox chown -R 999:999 /var/lib/postgresql/data
 
-# Set default port
-PORT=22300
+    sudo docker run --rm --name temp-postgres -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=joplin -v joplin_db_data:/var/lib/postgresql/data -d postgres
+    sleep 10 # Wait for the database to initialize
+    sudo docker stop temp-postgres
+fi
 
 # Prompt user for IP address or domain
 APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100")
@@ -208,15 +216,6 @@ APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "
 if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ ! "$APP_BASE_URL" =~ ^[a-zA-Z0-9.-]+$ ]]; then
     echo "Invalid IP address or domain. Exiting."
     exit 1
-fi
-
-# Check if PostgreSQL data volume exists
-if sudo docker volume ls | grep -q "joplin_db_data"; then
-    handle_postgres_db
-else
-    echo "No existing PostgreSQL database found. Creating a new one..."
-    sudo docker volume create joplin_db_data
-    sudo docker run --rm -v joplin_db_data:/var/lib/postgresql/data busybox chown -R 999:999 /var/lib/postgresql/data
 fi
 
 # Create Docker Compose configuration file
