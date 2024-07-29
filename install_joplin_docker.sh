@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.1
+# Version: 4.2
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -104,8 +104,8 @@ modify_postgres_user() {
 # Function to delete old PostgreSQL database and create a new one
 delete_and_create_postgres_db() {
     echo "Deleting old PostgreSQL database and creating a new one..."
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP DATABASE joplin;\""
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP USER $POSTGRES_USER;\""
+    sudo docker exec -it joplin-db-1 bash -c "dropdb -U \$POSTGRES_USER joplin"
+    sudo docker exec -it joplin-db-1 bash -c "dropuser -U \$POSTGRES_USER \$POSTGRES_USER"
 
     POSTGRES_USER=$(prompt_with_default "Enter new PostgreSQL username" "admin")
     POSTGRES_PASSWORD=$(prompt_with_default "Enter new PostgreSQL password" "password")
