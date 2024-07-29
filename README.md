@@ -19,6 +19,11 @@
 
 你可以选择使用 `wget` 或 `curl` 来下载并执行脚本：
 
+## how to use
+
+```sh
+wget https://raw.githubusercontent.com/iHub-2020/my-shell/main/install_joplin_docker.sh -O install_joplin_docker.sh && chmod +x install_joplin_docker.sh && sudo ./install_joplin_docker.sh
+
 ### 使用 `wget`
 
 ```sh
