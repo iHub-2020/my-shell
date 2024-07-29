@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.4
+# Version: 4.5
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -84,9 +84,16 @@ handle_postgres_db() {
     esac
 }
 
+# Function to ensure the postgres user exists
+ensure_postgres_user_exists() {
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"SELECT 1 FROM pg_roles WHERE rolname='postgres';\"" | grep -q 1 || \
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER postgres WITH SUPERUSER PASSWORD 'postgres';\""
+}
+
 # Function to modify PostgreSQL username and password
 modify_postgres_user() {
     echo "Modifying PostgreSQL username and password..."
+    ensure_postgres_user_exists
     local new_user=$(prompt_with_default "Enter new PostgreSQL username" "new_user")
     local new_password=$(prompt_with_default "Enter new PostgreSQL password" "new_password")
 
@@ -111,6 +118,8 @@ delete_and_create_postgres_db() {
     # Wait for the PostgreSQL service to be ready
     sleep 10
 
+    ensure_postgres_user_exists
+
     # Drop the database and user
     sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP DATABASE IF EXISTS joplin;\""
     sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP USER IF EXISTS $POSTGRES_USER;\""
@@ -131,8 +140,6 @@ delete_and_create_postgres_db() {
 # Function to update Joplin configuration file
 update_joplin_config() {
     NEW_DOCKER_COMPOSE=$(cat <<EOF
-version: '3.8'
-
 services:
   db:
     image: postgres:latest
