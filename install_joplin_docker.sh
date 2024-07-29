@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.6
+# Version: 4.7
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -119,6 +119,9 @@ delete_and_create_postgres_db() {
     sleep 10
 
     ensure_postgres_user_exists
+
+    # Disconnect all sessions from the joplin database
+    sudo docker exec joplin-db-1 psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'joplin';"
 
     # Drop the database and user
     sudo docker exec joplin-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS joplin;"
