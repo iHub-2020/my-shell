@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.2
+# Version: 4.3
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -104,12 +104,22 @@ modify_postgres_user() {
 # Function to delete old PostgreSQL database and create a new one
 delete_and_create_postgres_db() {
     echo "Deleting old PostgreSQL database and creating a new one..."
-    sudo docker exec -it joplin-db-1 bash -c "dropdb -U \$POSTGRES_USER joplin"
-    sudo docker exec -it joplin-db-1 bash -c "dropuser -U \$POSTGRES_USER \$POSTGRES_USER"
 
+    # Ensure the PostgreSQL container is running
+    sudo docker compose -f joplin-docker-compose.yml up -d db
+
+    # Wait for the PostgreSQL service to be ready
+    sleep 10
+
+    # Drop the database and user
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP DATABASE IF EXISTS joplin;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP USER IF EXISTS $POSTGRES_USER;\""
+
+    # Prompt for new username and password
     POSTGRES_USER=$(prompt_with_default "Enter new PostgreSQL username" "admin")
     POSTGRES_PASSWORD=$(prompt_with_default "Enter new PostgreSQL password" "password")
 
+    # Create new database and user
     sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE DATABASE joplin;\""
     sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';\""
     sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"GRANT ALL PRIVILEGES ON DATABASE joplin TO $POSTGRES_USER;\""
@@ -195,7 +205,7 @@ sudo mkdir -p /opt/joplin
 cd /opt/joplin
 
 # Check if PostgreSQL data volume exists
-if sudo docker volume ls | grep -q "db_data"; then
+if sudo docker volume ls | grep -q "joplin_db_data"; then
     handle_postgres_db
 else
     echo "No existing PostgreSQL database found. Creating a new one..."
@@ -271,7 +281,7 @@ server {
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     location / {
-        proxy_pass http://localhost:$PORT;
+        proxy_pass http://localhost:22300;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -289,7 +299,7 @@ EOF
     echo "Joplin Server installation completed! You can access it via https://$APP_BASE_URL"
 else
     # Display success message with HTTP URL
-    echo "Joplin Server installation completed! You can access it via http://$APP_BASE_URL:$PORT"
+    echo "Joplin Server installation completed! You can access it via http://$APP_BASE_URL:22300"
 fi
 
 # Check service status
