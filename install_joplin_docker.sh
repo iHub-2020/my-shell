@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.5
+# Version: 4.6
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -86,8 +86,8 @@ handle_postgres_db() {
 
 # Function to ensure the postgres user exists
 ensure_postgres_user_exists() {
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"SELECT 1 FROM pg_roles WHERE rolname='postgres';\"" | grep -q 1 || \
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER postgres WITH SUPERUSER PASSWORD 'postgres';\""
+    sudo docker exec joplin-db-1 psql -U admin -d joplin -c "SELECT 1 FROM pg_roles WHERE rolname='postgres';" | grep -q 1 || \
+    sudo docker exec joplin-db-1 psql -U admin -d joplin -c "CREATE USER postgres WITH SUPERUSER PASSWORD 'postgres';"
 }
 
 # Function to modify PostgreSQL username and password
@@ -97,10 +97,10 @@ modify_postgres_user() {
     local new_user=$(prompt_with_default "Enter new PostgreSQL username" "new_user")
     local new_password=$(prompt_with_default "Enter new PostgreSQL password" "new_password")
 
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER $new_user WITH PASSWORD '$new_password';\""
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"GRANT ALL PRIVILEGES ON DATABASE joplin TO $new_user;\""
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"REASSIGN OWNED BY $POSTGRES_USER TO $new_user;\""
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"ALTER USER $new_user WITH SUPERUSER;\""
+    sudo docker exec joplin-db-1 psql -U postgres -c "CREATE USER $new_user WITH PASSWORD '$new_password';"
+    sudo docker exec joplin-db-1 psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE joplin TO $new_user;"
+    sudo docker exec joplin-db-1 psql -U postgres -c "REASSIGN OWNED BY $POSTGRES_USER TO $new_user;"
+    sudo docker exec joplin-db-1 psql -U postgres -c "ALTER USER $new_user WITH SUPERUSER;"
 
     POSTGRES_USER=$new_user
     POSTGRES_PASSWORD=$new_password
@@ -121,18 +121,18 @@ delete_and_create_postgres_db() {
     ensure_postgres_user_exists
 
     # Drop the database and user
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP DATABASE IF EXISTS joplin;\""
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP USER IF EXISTS $POSTGRES_USER;\""
+    sudo docker exec joplin-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS joplin;"
+    sudo docker exec joplin-db-1 psql -U postgres -c "DROP USER IF EXISTS $POSTGRES_USER;"
 
     # Prompt for new username and password
     POSTGRES_USER=$(prompt_with_default "Enter new PostgreSQL username" "admin")
     POSTGRES_PASSWORD=$(prompt_with_default "Enter new PostgreSQL password" "password")
 
     # Create new database and user
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE DATABASE joplin;\""
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';\""
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"GRANT ALL PRIVILEGES ON DATABASE joplin TO $POSTGRES_USER;\""
-    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"ALTER USER $POSTGRES_USER WITH SUPERUSER;\""
+    sudo docker exec joplin-db-1 psql -U postgres -c "CREATE DATABASE joplin;"
+    sudo docker exec joplin-db-1 psql -U postgres -c "CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';"
+    sudo docker exec joplin-db-1 psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE joplin TO $POSTGRES_USER;"
+    sudo docker exec joplin-db-1 psql -U postgres -c "ALTER USER $POSTGRES_USER WITH SUPERUSER;"
 
     update_joplin_config
 }
@@ -243,6 +243,7 @@ echo "Pulling the latest Joplin server Docker image..."
 sudo docker pull joplin/server:latest
 
 # Start the Docker containers using Docker Compose
+sudo docker compose -f joplin-docker-compose.yml down
 sudo docker compose -f joplin-docker-compose.yml up -d
 
 # Check if the APP_BASE_URL is an IP address or a domain
