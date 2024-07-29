@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.7
+# Version: 4.0
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -57,6 +57,108 @@ configure_ufw() {
     sudo ufw status
 }
 
+# Function to handle PostgreSQL database operations
+handle_postgres_db() {
+    local choice
+    echo "PostgreSQL database detected. Choose an option:"
+    echo "1. Keep existing database"
+    echo "2. Modify username and password"
+    echo "3. Delete old database and create a new one"
+    read -p "Enter choice [1-3]: " choice
+
+    case $choice in
+        1)
+            echo "Keeping existing database..."
+            # No additional action needed
+            ;;
+        2)
+            modify_postgres_user
+            ;;
+        3)
+            delete_and_create_postgres_db
+            ;;
+        *)
+            echo "Invalid choice. Exiting."
+            exit 1
+            ;;
+    esac
+}
+
+# Function to modify PostgreSQL username and password
+modify_postgres_user() {
+    echo "Modifying PostgreSQL username and password..."
+    local new_user=$(prompt_with_default "Enter new PostgreSQL username" "new_user")
+    local new_password=$(prompt_with_default "Enter new PostgreSQL password" "new_password")
+
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER $new_user WITH PASSWORD '$new_password';\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"GRANT ALL PRIVILEGES ON DATABASE joplin TO $new_user;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"REASSIGN OWNED BY $POSTGRES_USER TO $new_user;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"ALTER USER $new_user WITH SUPERUSER;\""
+
+    POSTGRES_USER=$new_user
+    POSTGRES_PASSWORD=$new_password
+
+    update_joplin_config
+}
+
+# Function to delete old PostgreSQL database and create a new one
+delete_and_create_postgres_db() {
+    echo "Deleting old PostgreSQL database and creating a new one..."
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP DATABASE joplin;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP USER $POSTGRES_USER;\""
+
+    POSTGRES_USER=$(prompt_with_default "Enter new PostgreSQL username" "admin")
+    POSTGRES_PASSWORD=$(prompt_with_default "Enter new PostgreSQL password" "password")
+
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE DATABASE joplin;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"GRANT ALL PRIVILEGES ON DATABASE joplin TO $POSTGRES_USER;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"ALTER USER $POSTGRES_USER WITH SUPERUSER;\""
+
+    update_joplin_config
+}
+
+# Function to update Joplin configuration file
+update_joplin_config() {
+    NEW_DOCKER_COMPOSE=$(cat <<EOF
+version: '3.8'
+
+services:
+  db:
+    image: postgres:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: joplin
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  app:
+    image: joplin/server:latest
+    restart: unless-stopped
+    ports:
+      - "$PORT:$PORT"
+    environment:
+      APP_BASE_URL: "http://$APP_BASE_URL:$PORT"
+      DB_CLIENT: pg
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      POSTGRES_DATABASE: joplin
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PORT: 5432
+      POSTGRES_HOST: db
+      DISABLE_NTP: "1"
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+EOF
+)
+    echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
+    echo "Joplin configuration updated."
+}
+
 # Ensure the script is run as root
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root"
@@ -92,7 +194,6 @@ configure_ufw
 sudo mkdir -p /opt/joplin
 cd /opt/joplin
 
-# Prompt user for PostgreSQL username and password
 # Always use default values for first prompt
 POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "admin")
 POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "password")
@@ -103,61 +204,23 @@ PORT=22300
 # Prompt user for IP address or domain
 APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100")
 
-# Create Docker Compose configuration file
-NEW_DOCKER_COMPOSE=$(cat <<EOF
-version: '3.8'
-
-services:
-  db:
-    image: postgres:latest
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: joplin
-      POSTGRES_USER: $POSTGRES_USER
-      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-    volumes:
-      - db_data:/var/lib/postgresql/data
-
-  app:
-    image: joplin/server:latest
-    restart: unless-stopped
-    ports:
-      - "$PORT:$PORT"
-    environment:
-      APP_BASE_URL: "http://$APP_BASE_URL:$PORT"
-      DB_CLIENT: pg
-      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-      POSTGRES_DATABASE: joplin
-      POSTGRES_USER: $POSTGRES_USER
-      POSTGRES_PORT: 5432
-      POSTGRES_HOST: db
-      DISABLE_NTP: "1"
-    depends_on:
-      - db
-
-volumes:
-  db_data:
-EOF
-)
-
-# Check if existing Docker Compose file is different from the new one
-if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") joplin-docker-compose.yml > /dev/null; then
-    echo "Docker Compose configuration has changed."
-    # Stop existing Docker containers
-    sudo docker compose -f joplin-docker-compose.yml down
-    
-    # Prompt to clean PostgreSQL data
-    KEEP_DB_DATA=$(prompt_with_default "Do you want to keep the existing PostgreSQL data?" "y")
-    if [ "$KEEP_DB_DATA" == "n" ]; then
-        sudo rm -rf /opt/joplin/db_data
-        echo "Old PostgreSQL data removed."
-    fi
-    
-    # Update Docker Compose file
-    echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
-else
-    echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
+# Validate IP address or domain
+if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ ! "$APP_BASE_URL" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+    echo "Invalid IP address or domain. Exiting."
+    exit 1
 fi
+
+# Check if PostgreSQL data volume exists
+if sudo docker volume ls | grep -q "joplin_db_data"; then
+    handle_postgres_db
+else
+    echo "No existing PostgreSQL database found. Creating a new one..."
+    sudo docker volume create joplin_db_data
+    sudo docker run --rm -v joplin_db_data:/var/lib/postgresql/data busybox chown -R 999:999 /var/lib/postgresql/data
+fi
+
+# Create Docker Compose configuration file
+update_joplin_config
 
 # Pull the latest Joplin server Docker image
 echo "Pulling the latest Joplin server Docker image..."
