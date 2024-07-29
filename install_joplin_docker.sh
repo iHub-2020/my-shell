@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.3
+# Version: 4.4
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -148,9 +148,9 @@ services:
     image: joplin/server:latest
     restart: unless-stopped
     ports:
-      - "$PORT:$PORT"
+      - "22300:22300"
     environment:
-      APP_BASE_URL: "http://$APP_BASE_URL:$PORT"
+      APP_BASE_URL: "http://$APP_BASE_URL:22300"
       DB_CLIENT: pg
       POSTGRES_PASSWORD: $POSTGRES_PASSWORD
       POSTGRES_DATABASE: joplin
