@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 3.1
+# Version: 4.1
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -10,56 +10,153 @@ install_if_not_installed() {
     fi
 }
 
-# Function to prompt user and handle existing directories
-handle_existing_directory() {
-    local dir=$1
-    if [ -d "$dir" ]; then
-        echo "Directory $dir already exists."
-        read -t 15 -p "Do you want to keep it? (default: y) [y/n]: " KEEP_DIR
-        KEEP_DIR=${KEEP_DIR:-y}
-        if [ "$KEEP_DIR" == "n" ]; then
-            sudo rm -rf "$dir"
-            echo "Directory $dir has been removed."
-        else
-            echo "Keeping existing directory $dir."
-        fi
+# Function to install Docker Compose plugin if not already installed
+install_docker_compose_plugin() {
+    if ! docker compose version &> /dev/null; then
+        echo "Docker Compose plugin not found. Installing..."
+        DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+        mkdir -p $DOCKER_CONFIG/cli-plugins
+        curl -SL https://github.com/docker/compose/releases/download/v2.11.2/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose
+        chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+    else
+        echo "Docker Compose plugin is already installed."
     fi
 }
 
-# Function to prompt user and handle existing PostgreSQL database and user
-handle_existing_database() {
-    local db=$1
-    local user=$2
-
-    if sudo -i -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
-        echo "PostgreSQL database $db already exists."
-        read -t 15 -p "Do you want to keep it? (default: y) [y/n]: " KEEP_DB
-        KEEP_DB=${KEEP_DB:-y}
-        if [ "$KEEP_DB" == "n" ]; then
-            sudo -i -u postgres psql -c "DROP DATABASE $db;"
-            sudo -i -u postgres psql -c "DROP USER $user;"
-            echo "PostgreSQL database $db and user $user have been removed."
-        else
-            echo "Keeping existing PostgreSQL database $db."
-        fi
-    fi
+# Function to prompt user for input with a default value
+prompt_with_default() {
+    local prompt_text=$1
+    local default_value=$2
+    read -p "$prompt_text (default: $default_value): " input_value
+    input_value=${input_value:-$default_value}
+    echo "$input_value"
 }
 
-# Function to prompt user and handle existing Joplin installation
-handle_existing_joplin() {
-    local dir=$1
-    if [ -d "$dir" ]; then
-        echo "Joplin directory $dir already exists."
-        read -t 15 -p "Do you want to upgrade it? (default: y) [y/n]: " UPGRADE_JOPLIN
-        UPGRADE_JOPLIN=${UPGRADE_JOPLIN:-y}
-        if [ "$UPGRADE_JOPLIN" == "n" ]; then
-            echo "Keeping existing Joplin installation."
-            exit 0
-        else
-            echo "Upgrading Joplin installation."
-            sudo rm -rf "$dir"
+# Function to check and configure UFW
+configure_ufw() {
+    if ! sudo ufw status &> /dev/null; then
+        install_if_not_installed ufw
+        sudo ufw allow 22,80,443,22300/tcp
+        sudo ufw --force enable
+    else
+        echo "UFW is already installed."
+        if ! sudo ufw status | grep -q "22/tcp"; then
+            sudo ufw allow 22/tcp
         fi
+        if ! sudo ufw status | grep -q "80/tcp"; then
+            sudo ufw allow 80/tcp
+        fi
+        if ! sudo ufw status | grep -q "443/tcp"; then
+            sudo ufw allow 443/tcp
+        fi
+        if ! sudo ufw status | grep -q "22300/tcp"; then
+            sudo ufw allow 22300/tcp
+        fi
+        sudo ufw reload
     fi
+    sudo ufw status
+}
+
+# Function to handle PostgreSQL database operations
+handle_postgres_db() {
+    local choice
+    echo "PostgreSQL database detected. Choose an option:"
+    echo "1. Keep existing database"
+    echo "2. Modify username and password"
+    echo "3. Delete old database and create a new one"
+    read -p "Enter choice [1-3]: " choice
+
+    case $choice in
+        1)
+            echo "Keeping existing database..."
+            # No additional action needed
+            ;;
+        2)
+            modify_postgres_user
+            ;;
+        3)
+            delete_and_create_postgres_db
+            ;;
+        *)
+            echo "Invalid choice. Exiting."
+            exit 1
+            ;;
+    esac
+}
+
+# Function to modify PostgreSQL username and password
+modify_postgres_user() {
+    echo "Modifying PostgreSQL username and password..."
+    local new_user=$(prompt_with_default "Enter new PostgreSQL username" "new_user")
+    local new_password=$(prompt_with_default "Enter new PostgreSQL password" "new_password")
+
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER $new_user WITH PASSWORD '$new_password';\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"GRANT ALL PRIVILEGES ON DATABASE joplin TO $new_user;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"REASSIGN OWNED BY $POSTGRES_USER TO $new_user;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"ALTER USER $new_user WITH SUPERUSER;\""
+
+    POSTGRES_USER=$new_user
+    POSTGRES_PASSWORD=$new_password
+
+    update_joplin_config
+}
+
+# Function to delete old PostgreSQL database and create a new one
+delete_and_create_postgres_db() {
+    echo "Deleting old PostgreSQL database and creating a new one..."
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP DATABASE joplin;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"DROP USER $POSTGRES_USER;\""
+
+    POSTGRES_USER=$(prompt_with_default "Enter new PostgreSQL username" "admin")
+    POSTGRES_PASSWORD=$(prompt_with_default "Enter new PostgreSQL password" "password")
+
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE DATABASE joplin;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"GRANT ALL PRIVILEGES ON DATABASE joplin TO $POSTGRES_USER;\""
+    sudo docker exec -it joplin-db-1 bash -c "psql -U postgres -c \"ALTER USER $POSTGRES_USER WITH SUPERUSER;\""
+
+    update_joplin_config
+}
+
+# Function to update Joplin configuration file
+update_joplin_config() {
+    NEW_DOCKER_COMPOSE=$(cat <<EOF
+version: '3.8'
+
+services:
+  db:
+    image: postgres:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: joplin
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  app:
+    image: joplin/server:latest
+    restart: unless-stopped
+    ports:
+      - "$PORT:$PORT"
+    environment:
+      APP_BASE_URL: "http://$APP_BASE_URL:$PORT"
+      DB_CLIENT: pg
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      POSTGRES_DATABASE: joplin
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PORT: 5432
+      POSTGRES_HOST: db
+      DISABLE_NTP: "1"
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+EOF
+)
+    echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
+    echo "Joplin configuration updated."
 }
 
 # Ensure the script is run as root
@@ -68,146 +165,113 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Update system package list and upgrade existing packages
-apt-get update && apt-get upgrade -y
-
-# Install necessary packages
-install_if_not_installed curl
-install_if_not_installed wget
-install_if_not_installed gnupg2
-install_if_not_installed software-properties-common
-install_if_not_installed git
-
-# Adjust Git's HTTP buffer size and timeout settings
-git config --global http.postBuffer 104857600
-git config --global http.lowSpeedLimit 0
-git config --global http.lowSpeedTime 999999
-
-# Add PostgreSQL official repository and install PostgreSQL
-wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
-sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-apt-get update
-install_if_not_installed postgresql
-install_if_not_installed postgresql-contrib
-
-# Prompt user to enter PostgreSQL username and password
-read -t 60 -p "Enter PostgreSQL username (default: admin): " POSTGRES_USER
-POSTGRES_USER=${POSTGRES_USER:-admin}
-
-read -t 60 -s -p "Enter PostgreSQL password (default: password): " POSTGRES_PASSWORD
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-echo
-
-# Handle existing PostgreSQL database and user
-handle_existing_database imaticdb $POSTGRES_USER
-
-# Configure PostgreSQL
-sudo -i -u postgres psql -c "CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD';"
-sudo -i -u postgres psql -c "CREATE DATABASE imaticdb WITH OWNER $POSTGRES_USER;"
-
-# Handle existing Joplin installation
-handle_existing_joplin /opt/joplin
-
-# Ensure git is installed before cloning the repository
-install_if_not_installed git
-
-# Download and install Joplin server
-sudo mkdir -p /opt/joplin
-sudo chown $(whoami):$(whoami) /opt/joplin
-cd /opt/joplin
-
-# Infinite retry the clone operation until it succeeds
-while true; do
-    if git clone https://github.com/laurent22/joplin.git; then
-        break
-    else
-        echo "Cloning failed. Retrying in 5 seconds..."
-        sleep 5
-    fi
-done
-
-cd joplin/packages/server || { echo "Failed to change directory to joplin/packages/server"; exit 1; }
-npm install
-npm run build
-
-# Create Joplin server service file
-sudo tee /etc/systemd/system/joplin-server.service > /dev/null <<EOF
-[Unit]
-Description=Joplin Server
-After=network.target postgresql.service
-
-[Service]
-Type=simple
-User=$USER
-WorkingDirectory=/opt/joplin/joplin/packages/server
-ExecStart=/usr/bin/npm start
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Start and enable Joplin server service
-sudo systemctl daemon-reload
-sudo systemctl start joplin-server
-sudo systemctl enable joplin-server
-
-# Prompt for domain or local IP
-read -t 60 -p "Enter the domain or local IP to bind (default: local IP): " DOMAIN
-
-if [ -z "$DOMAIN" ]; then
-    IP=$(hostname -I | awk '{print $1}')
-    DOMAIN=$IP
-    echo "No domain entered, using local IP: $DOMAIN"
-else
-    echo "Binding domain: $DOMAIN"
+# Check and remove old install_joplin_docker.sh if exists
+if [ -f "/root/install_joplin_docker.sh" ]; then
+    echo "Old install_joplin_docker.sh found. Removing..."
+    sudo rm /root/install_joplin_docker.sh
 fi
 
-# Install and configure Nginx
-install_if_not_installed nginx
+# Download the latest install_joplin_docker.sh
+echo "Downloading the latest install_joplin_docker.sh..."
+wget -O /root/install_joplin_docker.sh https://raw.githubusercontent.com/iHub-2020/my-shell/main/install_joplin_docker.sh
+chmod +x /root/install_joplin_docker.sh
 
-if [[ "$DOMAIN" == "$IP" ]]; then
-    # Configure Nginx for local IP without SSL
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    echo "Docker is not installed. Installing Docker..."
+    /root/install_joplin_docker.sh
+else
+    echo "Docker is already installed."
+fi
+
+# Install Docker Compose plugin
+install_docker_compose_plugin
+
+# Configure UFW
+configure_ufw
+
+# Create Joplin directory
+sudo mkdir -p /opt/joplin
+cd /opt/joplin
+
+# Check if PostgreSQL data volume exists
+if sudo docker volume ls | grep -q "db_data"; then
+    handle_postgres_db
+else
+    echo "No existing PostgreSQL database found. Creating a new one..."
+    POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "admin")
+    POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "password")
+    sudo docker volume create joplin_db_data
+    sudo docker run --rm -v joplin_db_data:/var/lib/postgresql/data busybox chown -R 999:999 /var/lib/postgresql/data
+
+    sudo docker run --rm --name temp-postgres -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=joplin -v joplin_db_data:/var/lib/postgresql/data -d postgres
+    sleep 10 # Wait for the database to initialize
+    sudo docker stop temp-postgres
+fi
+
+# Prompt user for IP address or domain
+APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100")
+
+# Validate IP address or domain
+if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ ! "$APP_BASE_URL" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+    echo "Invalid IP address or domain. Exiting."
+    exit 1
+fi
+
+# Create Docker Compose configuration file
+update_joplin_config
+
+# Pull the latest Joplin server Docker image
+echo "Pulling the latest Joplin server Docker image..."
+sudo docker pull joplin/server:latest
+
+# Start the Docker containers using Docker Compose
+sudo docker compose -f joplin-docker-compose.yml up -d
+
+# Check if the APP_BASE_URL is an IP address or a domain
+if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    # If the user entered a domain, configure Nginx and SSL
+    # Check if Nginx is installed
+    if ! command -v nginx &> /dev/null; then
+        echo "Nginx is not installed. Installing Nginx..."
+        sudo apt-get install -y nginx
+    else
+        echo "Nginx is already installed."
+    fi
+
+    # Install Certbot for SSL certificates
+    install_if_not_installed certbot
+    install_if_not_installed python3-certbot-nginx
+
+    # Check existing SSL certificates
+    KEEP_CERTS=$(prompt_with_default "SSL certificates for $APP_BASE_URL already exist. Do you want to keep them?" "y")
+    if [ "$KEEP_CERTS" == "n" ]; then
+        sudo certbot delete --cert-name $APP_BASE_URL
+        echo "Old SSL certificates removed."
+        sudo certbot --nginx -d $APP_BASE_URL --non-interactive --agree-tos -m your-email@example.com
+    else
+        echo "Keeping existing SSL certificates."
+    fi
+
+    # Configure Nginx
     sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
 server {
     listen 80;
-    server_name $DOMAIN;
-
-    location / {
-        proxy_pass http://localhost:22300;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
-else
-    # Configure Nginx for domain with SSL
-    install_if_not_installed certbot
-    install_if_not_installed python3-certbot-nginx
-    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m your-email@example.com
-
-    # Check if SSL certificates were successfully issued
-    if [ -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem]; then
-        sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
+    server_name $APP_BASE_URL;
     return 301 https://\$host\$request_uri;
 }
 
 server {
     listen 443 ssl;
-    server_name $DOMAIN;
+    server_name $APP_BASE_URL;
 
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/$APP_BASE_URL/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$APP_BASE_URL/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     location / {
-        proxy_pass http://localhost:22300;
+        proxy_pass http://localhost:$PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -215,49 +279,21 @@ server {
     }
 }
 EOF
-    else
-        # Fallback to HTTP if SSL certificate issuance failed
-        echo "SSL certificate issuance failed, falling back to HTTP."
-        sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
 
-    location / {
-        proxy_pass http://localhost:22300;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
-    fi
-fi
+    # Enable Nginx configuration
+    sudo rm -f /etc/nginx/sites-enabled/joplin
+    sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
+    sudo nginx -t && sudo systemctl restart nginx
 
-# Enable Nginx configuration
-sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/ || sudo rm /etc/nginx/sites-enabled/joplin && sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl restart nginx
-
-# Check if port 22300 is open, if not, open it
-if command -v ufw >/dev/null 2>&1; then
-    if ! sudo ufw status | grep -q "22300/tcp"; then
-        echo "Port 22300 is not open. Opening port 22300..."
-        sudo ufw allow 22300/tcp
-        sudo ufw reload
-    fi
+    # Display success message with HTTPS URL
+    echo "Joplin Server installation completed! You can access it via https://$APP_BASE_URL"
 else
-    install_if_not_installed iptables
-    if ! sudo iptables -C INPUT -p tcp --dport 22300 -j ACCEPT >/dev/null 2>&1; then
-        echo "Port 22300 is not open in iptables. Opening port 22300..."
-        sudo iptables -A INPUT -p tcp --dport 22300 -j ACCEPT
-        sudo iptables-save | sudo tee /etc/iptables/rules.v4
-    fi
+    # Display success message with HTTP URL
+    echo "Joplin Server installation completed! You can access it via http://$APP_BASE_URL:$PORT"
 fi
 
-# Print completion message
-if [[ "$DOMAIN" == "$IP" ]]; then
-    echo "Joplin Server installation completed! You can access it via http://$DOMAIN:22300"
-else
-    echo "Joplin Server installation completed! You can access it via https://$DOMAIN:22300"
-fi
+# Check service status
+sudo docker compose -f joplin-docker-compose.yml ps
+
+# Check logs
+sudo docker compose -f joplin-docker-compose.yml logs
