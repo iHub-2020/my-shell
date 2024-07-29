@@ -173,7 +173,7 @@ fi
 
 # Download the latest install_joplin_docker.sh
 echo "Downloading the latest install_joplin_docker.sh..."
-wget -O /root/install_joplin_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh
+wget -O /root/install_joplin_docker.sh https://raw.githubusercontent.com/iHub-2020/my-shell/main/install_joplin_docker.sh
 chmod +x /root/install_joplin_docker.sh
 
 # Check if Docker is installed
