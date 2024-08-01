@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.7
+# Version: 4.9
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -94,13 +94,18 @@ ensure_postgres_user_exists() {
 modify_postgres_user() {
     echo "Modifying PostgreSQL username and password..."
     ensure_postgres_user_exists
+
+    local current_user=$(prompt_with_default "Enter current PostgreSQL username" "admin")
     local new_user=$(prompt_with_default "Enter new PostgreSQL username" "new_user")
     local new_password=$(prompt_with_default "Enter new PostgreSQL password" "new_password")
 
+    sudo docker exec joplin-db-1 psql -U postgres -c "ALTER USER $current_user WITH PASSWORD '$new_password';"
     sudo docker exec joplin-db-1 psql -U postgres -c "CREATE USER $new_user WITH PASSWORD '$new_password';"
     sudo docker exec joplin-db-1 psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE joplin TO $new_user;"
-    sudo docker exec joplin-db-1 psql -U postgres -c "REASSIGN OWNED BY $POSTGRES_USER TO $new_user;"
+    sudo docker exec joplin-db-1 psql -U postgres -c "REASSIGN OWNED BY $current_user TO $new_user;"
     sudo docker exec joplin-db-1 psql -U postgres -c "ALTER USER $new_user WITH SUPERUSER;"
+    # Optionally, drop the old user if no longer needed
+    sudo docker exec joplin-db-1 psql -U postgres -c "DROP USER IF EXISTS $current_user;"
 
     POSTGRES_USER=$new_user
     POSTGRES_PASSWORD=$new_password
