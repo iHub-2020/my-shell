@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 5.3
+# Version: 5.4
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -341,25 +341,4 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
-
-    # Enable Nginx configuration
-    sudo rm -f /etc/nginx/sites-enabled/joplin
-    sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
-    sudo nginx -t && sudo systemctl restart nginx
-
-    # Display success message with HTTPS URL
-    echo "Joplin Server installation completed! You can access it via https://$APP_BASE_URL"
-else
-    # Display success message with HTTP URL
-    echo "Joplin Server installation completed! You can access it via http://$APP_BASE_URL:22300"
-fi
-
-# Check service status
-sudo docker compose -f joplin-docker-compose.yml ps
-
-# Check logs
-sudo docker compose -f joplin-docker-compose.yml logs
+        proxy_set_header X-Forwarded-Proto \$
