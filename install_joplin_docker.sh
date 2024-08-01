@@ -1,12 +1,24 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 4.9
+# Version: 5.0
 
 # Function to install a package if not already installed
 install_if_not_installed() {
     if ! dpkg -l | grep -q "$1"; then
         sudo apt-get install -y "$1"
+    fi
+}
+
+# Function to install Docker if not already installed
+install_docker() {
+    if ! command -v docker &> /dev/null; then
+        echo "Docker is not installed. Installing Docker..."
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sudo sh get-docker.sh
+        rm get-docker.sh
+    else
+        echo "Docker is already installed."
     fi
 }
 
@@ -201,13 +213,8 @@ echo "Downloading the latest install_joplin_docker.sh..."
 wget -O /root/install_joplin_docker.sh https://raw.githubusercontent.com/iHub-2020/my-shell/main/install_joplin_docker.sh
 chmod +x /root/install_joplin_docker.sh
 
-# Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    echo "Docker is not installed. Installing Docker..."
-    /root/install_joplin_docker.sh
-else
-    echo "Docker is already installed."
-fi
+# Install Docker if not installed
+install_docker
 
 # Install Docker Compose plugin
 install_docker_compose_plugin
