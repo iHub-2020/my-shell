@@ -1,24 +1,12 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 5.0
+# Version: 5.1
 
 # Function to install a package if not already installed
 install_if_not_installed() {
     if ! dpkg -l | grep -q "$1"; then
         sudo apt-get install -y "$1"
-    fi
-}
-
-# Function to install Docker if not already installed
-install_docker() {
-    if ! command -v docker &> /dev/null; then
-        echo "Docker is not installed. Installing Docker..."
-        curl -fsSL https://get.docker.com -o get-docker.sh
-        sudo sh get-docker.sh
-        rm get-docker.sh
-    else
-        echo "Docker is already installed."
     fi
 }
 
@@ -196,6 +184,37 @@ EOF
     echo "Joplin configuration updated."
 }
 
+# Function to install Docker if not already installed
+install_docker() {
+    if ! command -v docker &> /dev/null; then
+        echo "Docker is not installed. Installing Docker..."
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sudo sh get-docker.sh
+        rm get-docker.sh
+    else
+        echo "Docker is already installed."
+    fi
+}
+
+# Function to pull Docker image with retries
+pull_docker_image() {
+    local image=$1
+    local retries=5
+    local count=0
+
+    until [ $count -ge $retries ]; do
+        sudo docker pull $image && break
+        count=$((count + 1))
+        echo "Retrying Docker image pull ($count/$retries)..."
+        sleep 10
+    done
+
+    if [ $count -ge $retries ]; then
+        echo "Failed to pull Docker image after $retries attempts."
+        exit 1
+    fi
+}
+
 # Ensure the script is run as root
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root"
@@ -253,13 +272,18 @@ fi
 # Create Docker Compose configuration file
 update_joplin_config
 
-# Pull the latest Joplin server Docker image
+# Pull the latest Joplin server Docker image with retry
 echo "Pulling the latest Joplin server Docker image..."
-sudo docker pull joplin/server:latest
+pull_docker_image joplin/server:latest
 
 # Start the Docker containers using Docker Compose
-sudo docker compose -f joplin-docker-compose.yml down
-sudo docker compose -f joplin-docker-compose.yml up -d
+{
+    sudo docker compose -f joplin-docker-compose.yml down
+    sudo docker compose -f joplin-docker-compose.yml up -d
+} || {
+    echo "Installation interrupted or failed. Please check the logs for details."
+    exit 1
+}
 
 # Check if the APP_BASE_URL is an IP address or a domain
 if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
