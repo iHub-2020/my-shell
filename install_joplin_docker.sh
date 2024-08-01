@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 5.1
+# Version: 5.2
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -284,6 +284,11 @@ pull_docker_image joplin/server:latest
     echo "Installation interrupted or failed. Please check the logs for details."
     exit 1
 }
+
+# Enter Joplin container and modify NTP server
+sudo docker exec -it $(sudo docker ps -q -f "ancestor=joplin/server:latest") bash -c "
+sed -i 's/pool.ntp.org:123/time1.aliyun.com:123/g' /home/joplin/packages/server/dist/app.js
+"
 
 # Check if the APP_BASE_URL is an IP address or a domain
 if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
