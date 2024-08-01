@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: reyanmatic
-# Version: 5.2
+# Version: 5.3
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -285,9 +285,13 @@ pull_docker_image joplin/server:latest
     exit 1
 }
 
-# Enter Joplin container and modify NTP server
+# 确认 NTP 检查在 Joplin 容器中被禁用
 sudo docker exec -it $(sudo docker ps -q -f "ancestor=joplin/server:latest") bash -c "
-sed -i 's/pool.ntp.org:123/time1.aliyun.com:123/g' /home/joplin/packages/server/dist/app.js
+sed -i '/const ntp_1 = require(\"@joplin/lib/ntp\");/a\
+if (process.env.DISABLE_NTP === \"true\") {\
+    console.log(\"NTP check disabled\");\
+    return;\
+}' /home/joplin/packages/server/dist/app.js
 "
 
 # Check if the APP_BASE_URL is an IP address or a domain
