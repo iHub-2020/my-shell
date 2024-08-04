@@ -160,7 +160,7 @@ EOF
 if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") joplin-docker-compose.yml > /dev/null; then
     echo "Docker Compose configuration has changed."
     # Stop existing Docker containers
-    sudo docker compose -f joplin-docker-compose.yml down
+    sudo docker compose down
     
     # Prompt to clean PostgreSQL data
     KEEP_DB_DATA=$(prompt_with_default "Do you want to keep the existing PostgreSQL data?" "y")
@@ -175,12 +175,31 @@ else
     echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
 fi
 
+# Function to pull Docker image with retry
+pull_docker_image() {
+    local image=$1
+    local retries=5
+    local count=0
+
+    until [ $count -ge $retries ]; do
+        sudo docker pull $image && break
+        count=$((count + 1))
+        echo "Retrying Docker image pull ($count/$retries)..."
+        sleep 10
+    done
+
+    if [ $count -ge $retries ]; then
+        echo "Failed to pull Docker image after $retries attempts."
+        exit 1
+    fi
+}
+
 # Pull the latest Joplin server Docker image
 echo "Pulling the latest Joplin server Docker image..."
-sudo docker pull joplin/server:latest
+pull_docker_image joplin/server:latest
 
 # Start the Docker containers using Docker Compose
-sudo docker compose -f joplin-docker-compose.yml up -d
+sudo docker compose up -d
 
 # Wait for Joplin container to be fully up and running
 echo "Waiting for Joplin container to be ready..."
@@ -193,7 +212,7 @@ JOPLIN_CONTAINER_ID=$(sudo docker ps -q -f "ancestor=joplin/server:latest")
 replace_ntp_server() {
     local file_path=$1
     local ntp_server="time1.aliyun.com"
-    sudo docker exec -u 0 -it $JOPLIN_CONTAINER_ID /bin/sh -c "sed -i 's|pool.ntp.org|$ntp_server|g' $file_path"
+    sudo docker exec -u 0 $JOPLIN_CONTAINER_ID /bin/sh -c "sed -i 's|pool.ntp.org|$ntp_server|g' $file_path"
 }
 
 # Replace NTP server in specified files
@@ -266,7 +285,7 @@ else
 fi
 
 # Check service status
-sudo docker compose -f joplin-docker-compose.yml ps
+sudo docker compose ps
 
 # Check logs
-sudo docker compose -f joplin-docker-compose.yml logs
+sudo docker compose logs
