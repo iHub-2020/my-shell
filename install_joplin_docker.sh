@@ -206,45 +206,60 @@ pull_docker_image joplin/server:latest
 # 使用 Docker Compose 启动容器
 sudo docker compose -f joplin-docker-compose.yml up -d
 
-# 函数：等待容器准备就绪
+# 函数：等待容器准备就绪并检查日志
 wait_for_container() {
     local container_name=$1
-    local retries=10
-    local count=0
+    local log_errors=()
+    local timeout=60  # 设置超时时间（秒）
+    local interval=5  # 设置检查间隔（秒）
+    local time_elapsed=0
 
-    until [ $count -ge $retries ]; do
-        if [ "$(sudo docker inspect -f '{{.State.Running}}' $container_name 2>/dev/null)" == "true" ]; then
+    echo "Waiting for $container_name to be ready..."
+
+    while [ $time_elapsed -lt $timeout ]; do
+        sleep $interval
+        time_elapsed=$((time_elapsed + interval))
+
+        # 检查容器日志中的错误
+        log_output=$(sudo docker logs $container_name 2>&1)
+        if echo "$log_output" | grep -q "Ntp server"; then
+            echo "NTP server error detected, modifying NTP server..."
+            local ntp_server="time1.aliyun.com"
+            local files=(
+                "/home/joplin/packages/lib/vendor/ntp-client.js"
+                "/home/joplin/packages/server/src/env.ts"
+                "/home/joplin/packages/server/dist/env.js"
+            )
+            for file_path in "${files[@]}"; do
+                sudo docker exec -u 0 $container_name /bin/sh -c "sed -i 's|pool.ntp.org|$ntp_server|g' $file_path"
+            done
+            sudo docker restart $container_name
+            echo "Container $container_name restarted."
+            time_elapsed=0  # 重新计时
+        fi
+
+        # 检查容器日志中的其他错误
+        if echo "$log_output" | grep -q "Error"; then
+            log_errors+=("$(echo "$log_output" | grep "Error")")
+        else
             echo "$container_name is ready."
             return
         fi
-        count=$((count + 1))
-        echo "Waiting for $container_name to be ready ($count/$retries)..."
-        sleep 10
     done
 
-    if [ $count -ge $retries ]; then
-        echo "Failed to wait for $container_name to be ready."
-        exit 1
+    if [ ${#log_errors[@]} -gt 0 ]; then
+        echo "Errors detected in $container_name logs:"
+        for error in "${log_errors[@]}"; do
+            echo "$error"
+        done
     fi
+
+    echo "Failed to wait for $container_name to be ready within timeout period."
+    exit 1
 }
 
 # 等待 Joplin 容器完全启动
 wait_for_container "app"
-
-# 获取 Joplin 应用容器的 ID
-JOPLIN_CONTAINER_ID=$(sudo docker ps -q -f "name=app")
-
-# 函数：在指定文件中替换 NTP 服务器
-replace_ntp_server() {
-    local file_path=$1
-    local ntp_server="time1.aliyun.com"
-    sudo docker exec -u 0 $JOPLIN_CONTAINER_ID /bin/sh -c "sed -i 's|pool.ntp.org|$ntp_server|g' $file_path"
-}
-
-# 在指定文件中替换 NTP 服务器
-replace_ntp_server "/home/joplin/packages/lib/vendor/ntp-client.js"
-replace_ntp_server "/home/joplin/packages/server/src/env.ts"
-replace_ntp_server "/home/joplin/packages/server/dist/env.js"
 
 # 检查 APP_BASE_URL 是 IP 地址还是域名
 if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
