@@ -83,12 +83,12 @@ fi
 # Remove old scripts if they exist
 cleanup
 
-# Download the latest install_joplin_docker.sh
+# 下载最新的 install_joplin_docker.sh
 echo "Downloading the latest install_joplin_docker.sh..."
 wget -O /root/install_joplin_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh
 chmod +x /root/install_joplin_docker.sh
 
-# Check if Docker is installed
+# 检查 Docker 是否已安装
 if ! command -v docker &> /dev/null; then
     echo "Docker is not installed. Installing Docker..."
     /root/install_joplin_docker.sh
@@ -96,30 +96,30 @@ else
     echo "Docker is already installed."
 fi
 
-# Install Docker Compose plugin
+# 安装 Docker Compose 插件
 install_docker_compose_plugin
 
-# Configure UFW
+# 配置 UFW
 configure_ufw
 
-# Create a data persistent volume
+# 创建数据持久化卷
 docker volume create joplin_data
 
-# Create Joplin directory
+# 创建 Joplin 目录
 sudo mkdir -p /opt/joplin
 cd /opt/joplin
 
-# Prompt user for PostgreSQL username and password
+# 提示用户输入 PostgreSQL 用户名和密码
 POSTGRES_USER=$(prompt_with_default "Enter PostgreSQL username" "admin")
 POSTGRES_PASSWORD=$(prompt_with_default "Enter PostgreSQL password" "password")
 
-# Set default port
+# 设置默认端口
 PORT=22300
 
-# Prompt user for IP address or domain
+# 提示用户输入 IP 地址或域名
 APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100")
 
-# Create Docker Compose configuration file
+# 创建 Docker Compose 配置文件
 NEW_DOCKER_COMPOSE=$(cat <<EOF
 version: '3'
 
@@ -156,13 +156,13 @@ services:
 EOF
 )
 
-# Check if existing Docker Compose file is different from the new one
+# 检查现有的 Docker Compose 文件是否与新文件不同
 if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") joplin-docker-compose.yml > /dev/null; then
     echo "Docker Compose configuration has changed."
-    # Stop existing Docker containers
+    # 停止现有 Docker 容器
     sudo docker compose -f joplin-docker-compose.yml down
     
-    # Prompt to clean PostgreSQL data
+    # 提示是否清理 PostgreSQL 数据
     KEEP_DB_DATA=$(prompt_with_default "Do you want to keep the existing PostgreSQL data?" "y")
     if [ "$KEEP_DB_DATA" == "n" ]; then
         sudo docker volume rm joplin_data
@@ -170,13 +170,13 @@ if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") jopl
         echo "Old PostgreSQL data removed."
     fi
     
-    # Update Docker Compose file
+    # 更新 Docker Compose 文件
     echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
 else
     echo "$NEW_DOCKER_COMPOSE" | sudo tee joplin-docker-compose.yml > /dev/null
 fi
 
-# Function to pull Docker image with retry
+# 函数：重试拉取 Docker 镜像
 pull_docker_image() {
     local image=$1
     local retries=5
@@ -195,14 +195,14 @@ pull_docker_image() {
     fi
 }
 
-# Pull the latest Joplin server Docker image
+# 拉取最新的 Joplin 服务器 Docker 镜像
 echo "Pulling the latest Joplin server Docker image..."
 pull_docker_image joplin/server:latest
 
-# Start the Docker containers using Docker Compose
+# 使用 Docker Compose 启动容器
 sudo docker compose -f joplin-docker-compose.yml up -d
 
-# Function to wait for a container to be ready
+# 函数：等待容器准备就绪
 wait_for_container() {
     local container_name=$1
     local retries=10
@@ -224,28 +224,28 @@ wait_for_container() {
     fi
 }
 
-# Wait for Joplin container to be fully up and running
+# 等待 Joplin 容器完全启动
 wait_for_container "app"
 
-# Get the container ID of the Joplin app
+# 获取 Joplin 应用容器的 ID
 JOPLIN_CONTAINER_ID=$(sudo docker ps -q -f "name=app")
 
-# Function to replace NTP server in specified files
+# 函数：在指定文件中替换 NTP 服务器
 replace_ntp_server() {
     local file_path=$1
     local ntp_server="time1.aliyun.com"
     sudo docker exec -u 0 $JOPLIN_CONTAINER_ID /bin/sh -c "sed -i 's|pool.ntp.org|$ntp_server|g' $file_path"
 }
 
-# Replace NTP server in specified files
+# 在指定文件中替换 NTP 服务器
 replace_ntp_server "/home/joplin/packages/lib/vendor/ntp-client.js"
 replace_ntp_server "/home/joplin/packages/server/src/env.ts"
 replace_ntp_server "/home/joplin/packages/server/dist/env.js"
 
-# Check if the APP_BASE_URL is an IP address or a domain
+# 检查 APP_BASE_URL 是 IP 地址还是域名
 if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    # If the user entered a domain, configure Nginx and SSL
-    # Check if Nginx is installed
+    # 如果用户输入的是域名，配置 Nginx 和 SSL
+    # 检查是否安装了 Nginx
     if ! command -v nginx &> /dev/null; then
         echo "Nginx is not installed. Installing Nginx..."
         sudo apt-get install -y nginx
@@ -253,11 +253,11 @@ if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "Nginx is already installed."
     fi
 
-    # Install Certbot for SSL certificates
+    # 安装 Certbot 以获取 SSL 证书
     install_if_not_installed certbot
     install_if_not_installed python3-certbot-nginx
 
-    # Check existing SSL certificates
+    # 检查现有的 SSL 证书
     KEEP_CERTS=$(prompt_with_default "SSL certificates for $APP_BASE_URL already exist. Do you want to keep them?" "y")
     if [ "$KEEP_CERTS" == "n" ]; then
         sudo certbot delete --cert-name $APP_BASE_URL
@@ -267,7 +267,7 @@ if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "Keeping existing SSL certificates."
     fi
 
-    # Configure Nginx
+    # 配置 Nginx
     sudo tee /etc/nginx/sites-available/joplin > /dev/null <<EOF
 server {
     listen 80;
@@ -294,20 +294,20 @@ server {
 }
 EOF
 
-    # Enable Nginx configuration
+    # 启用 Nginx 配置
     sudo rm -f /etc/nginx/sites-enabled/joplin
     sudo ln -s /etc/nginx/sites-available/joplin /etc/nginx/sites-enabled/
     sudo nginx -t && sudo systemctl restart nginx
 
-    # Display success message with HTTPS URL
+    # 显示成功消息，提供 HTTPS URL
     echo "Joplin Server installation completed! You can access it via https://$APP_BASE_URL"
 else
-    # Display success message with HTTP URL
+    # 显示成功消息，提供 HTTP URL
     echo "Joplin Server installation completed! You can access it via http://$APP_BASE_URL:$PORT"
 fi
 
-# Check service status
+# 检查服务状态
 sudo docker compose -f joplin-docker-compose.yml ps
 
-# Check logs
+# 检查日志
 sudo docker compose -f joplin-docker-compose.yml logs
