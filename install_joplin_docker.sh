@@ -75,7 +75,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Ensure the script is run as root
-if [ "$EUID" -ne 0 ]; then
+if [ "$EUID" -ne 0 ];; then
     echo "Please run as root"
     exit 1
 fi
@@ -132,8 +132,8 @@ services:
       - "5432:5432"
     restart: unless-stopped
     environment:
-      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_DB=joplin
 
   app:
@@ -141,17 +141,18 @@ services:
     depends_on:
       - db
     ports:
-      - "$PORT:$PORT"
+      - "${PORT}:${PORT}"
     restart: unless-stopped
     environment:
-      - APP_PORT=$PORT
-      - APP_BASE_URL=http://$APP_BASE_URL:$PORT
+      - APP_PORT=${PORT}
+      - APP_BASE_URL=http://${APP_BASE_URL}:${PORT}
       - DB_CLIENT=pg
-      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DATABASE=joplin
-      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PORT=5432
       - POSTGRES_HOST=db
+    command: ["sh", "-c", "npm run migrate && pm2-runtime start dist/app.js"]  # 这条命令首先运行数据库迁移脚本，然后启动应用程序
 EOF
 )
 
@@ -159,12 +160,13 @@ EOF
 if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") joplin-docker-compose.yml > /dev/null; then
     echo "Docker Compose configuration has changed."
     # Stop existing Docker containers
-    sudo docker compose down
+    sudo docker compose -f joplin-docker-compose.yml down
     
     # Prompt to clean PostgreSQL data
     KEEP_DB_DATA=$(prompt_with_default "Do you want to keep the existing PostgreSQL data?" "y")
     if [ "$KEEP_DB_DATA" == "n" ]; then
-        sudo rm -rf /var/lib/docker/volumes/joplin_data
+        sudo docker volume rm joplin_data
+        docker volume create joplin_data
         echo "Old PostgreSQL data removed."
     fi
     
@@ -198,7 +200,7 @@ echo "Pulling the latest Joplin server Docker image..."
 pull_docker_image joplin/server:latest
 
 # Start the Docker containers using Docker Compose
-sudo docker compose up -d
+sudo docker compose -f joplin-docker-compose.yml up -d
 
 # Function to wait for a container to be ready
 wait_for_container() {
@@ -305,7 +307,7 @@ else
 fi
 
 # Check service status
-sudo docker compose ps
+sudo docker compose -f joplin-docker-compose.yml ps
 
 # Check logs
-sudo docker compose logs
+sudo docker compose -f joplin-docker-compose.yml logs
