@@ -127,7 +127,7 @@ services:
   db:
     image: postgres:16
     volumes:
-      - /var/lib/docker/volumes/joplin_data/_data:/var/lib/postgresql/data
+      - joplin_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     restart: unless-stopped
