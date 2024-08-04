@@ -83,6 +83,11 @@ fi
 # Remove old scripts if they exist
 cleanup
 
+# 删除现有的 Docker Compose 配置文件
+if [ -f "/opt/joplin/joplin-docker-compose.yml" ]; then
+    sudo rm /opt/joplin/joplin-docker-compose.yml
+fi
+
 # 下载最新的 install_joplin_docker.sh
 echo "Downloading the latest install_joplin_docker.sh..."
 wget -O /root/install_joplin_docker.sh https://raw.githubusercontent.com/iHub-2020/docker-shell/main/install_docker.sh
