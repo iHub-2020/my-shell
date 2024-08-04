@@ -58,17 +58,30 @@ configure_ufw() {
     sudo ufw status
 }
 
+# Function to clean up scripts
+cleanup() {
+    echo "Cleaning up..."
+    if [ -f "/root/get-docker.sh" ]; then
+        echo "Deleting /root/get-docker.sh"
+        sudo rm /root/get-docker.sh
+    fi
+    if [ -f "/root/install_joplin_docker.sh" ]; then
+        echo "Deleting /root/install_joplin_docker.sh"
+        sudo rm /root/install_joplin_docker.sh
+    fi
+}
+
+# Ensure cleanup is called on script exit
+trap cleanup EXIT
+
 # Ensure the script is run as root
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root"
     exit 1
 fi
 
-# Check and remove old install_joplin_docker.sh if exists
-if [ -f "/root/install_joplin_docker.sh" ]; then
-    echo "Old install_joplin_docker.sh found. Removing..."
-    sudo rm /root/install_joplin_docker.sh
-fi
+# Remove old scripts if they exist
+cleanup
 
 # Download the latest install_joplin_docker.sh
 echo "Downloading the latest install_joplin_docker.sh..."
@@ -114,7 +127,7 @@ services:
   db:
     image: postgres:16
     volumes:
-      - /var/lib/docker/volumes/joplin_data/db:/var/lib/postgresql/data
+      - /var/lib/docker/volumes/joplin_data/_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     restart: unless-stopped
