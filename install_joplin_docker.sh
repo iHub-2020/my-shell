@@ -75,7 +75,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Ensure the script is run as root
-if [ "$EUID" -ne 0 ];; then
+if [ "$EUID" -ne 0 ]; then
     echo "Please run as root"
     exit 1
 fi
