@@ -127,7 +127,7 @@ services:
   db:
     image: postgres:16
     volumes:
-      - joplin_data:/var/lib/postgresql/data
+      - /var/lib/docker/volumes/joplin_data/_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     restart: unless-stopped
@@ -152,10 +152,6 @@ services:
       - POSTGRES_USER=$POSTGRES_USER
       - POSTGRES_PORT=5432
       - POSTGRES_HOST=db
-    command: ["sh", "-c", "npm run migrate && pm2-runtime start dist/app.js"]
-
-volumes:
-  joplin_data:
 EOF
 )
 
