@@ -124,20 +124,6 @@ PORT=22300
 # 提示用户输入 IP 地址或域名
 APP_BASE_URL=$(prompt_with_default "Enter the IP address or domain for Joplin" "192.168.1.100")
 
-# 创建 entrypoint.sh 脚本
-cat <<'EOF' > /opt/joplin/entrypoint.sh
-#!/bin/sh
-
-# 执行数据库迁移
-yarn generateTypes
-
-# 启动应用程序
-pm2-runtime start dist/app.js
-EOF
-
-# 确保 entrypoint.sh 具有可执行权限
-chmod +x /opt/joplin/entrypoint.sh
-
 # 创建 Docker Compose 配置文件
 NEW_DOCKER_COMPOSE=$(cat <<EOF
 version: '3'
@@ -171,9 +157,6 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PORT=5432
       - POSTGRES_HOST=db
-    volumes:
-      - /opt/joplin/entrypoint.sh:/entrypoint.sh
-    command: ["/entrypoint.sh"]
 EOF
 )
 
