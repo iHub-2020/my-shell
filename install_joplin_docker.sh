@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 3.9
+# Version: 4.0
 # Last Modified: 2024-08-04
 
 # Function to install a package if not already installed
@@ -153,6 +153,9 @@ services:
       - POSTGRES_PORT=5432
       - POSTGRES_HOST=db
     command: ["sh", "-c", "npm run migrate && pm2-runtime start dist/app.js"]
+
+volumes:
+  joplin_data:
 EOF
 )
 
@@ -165,7 +168,7 @@ if [ -f joplin-docker-compose.yml ] && ! diff <(echo "$NEW_DOCKER_COMPOSE") jopl
     # Prompt to clean PostgreSQL data
     KEEP_DB_DATA=$(prompt_with_default "Do you want to keep the existing PostgreSQL data?" "y")
     if [ "$KEEP_DB_DATA" == "n" ]; then
-        sudo rm -rf /opt/joplin/db_data
+        sudo rm -rf /var/lib/docker/volumes/joplin_data
         echo "Old PostgreSQL data removed."
     fi
     
@@ -204,11 +207,11 @@ sudo docker compose up -d
 # Function to wait for a container to be ready
 wait_for_container() {
     local container_name=$1
-    local retries=5
+    local retries=10
     local count=0
 
     until [ $count -ge $retries ]; do
-        if sudo docker ps -q -f name=$container_name &> /dev/null; then
+        if [ "$(sudo docker inspect -f '{{.State.Running}}' $container_name 2>/dev/null)" == "true" ]; then
             echo "$container_name is ready."
             return
         fi
@@ -224,10 +227,10 @@ wait_for_container() {
 }
 
 # Wait for Joplin container to be fully up and running
-wait_for_container "joplin-app"
+wait_for_container "app"
 
 # Get the container ID of the Joplin app
-JOPLIN_CONTAINER_ID=$(sudo docker ps -q -f "ancestor=joplin/server:latest")
+JOPLIN_CONTAINER_ID=$(sudo docker ps -q -f "name=app")
 
 # Function to replace NTP server in specified files
 replace_ntp_server() {
