@@ -152,6 +152,7 @@ services:
       - POSTGRES_USER=$POSTGRES_USER
       - POSTGRES_PORT=5432
       - POSTGRES_HOST=db
+    command: ["sh", "-c", "npm run migrate && pm2-runtime start dist/app.js"]
 EOF
 )
 
