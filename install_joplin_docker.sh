@@ -201,9 +201,30 @@ pull_docker_image joplin/server:latest
 # Start the Docker containers using Docker Compose
 sudo docker compose up -d
 
+# Function to wait for a container to be ready
+wait_for_container() {
+    local container_name=$1
+    local retries=5
+    local count=0
+
+    until [ $count -ge $retries ]; do
+        if sudo docker ps -q -f name=$container_name &> /dev/null; then
+            echo "$container_name is ready."
+            return
+        fi
+        count=$((count + 1))
+        echo "Waiting for $container_name to be ready ($count/$retries)..."
+        sleep 10
+    done
+
+    if [ $count -ge $retries ]; then
+        echo "Failed to wait for $container_name to be ready."
+        exit 1
+    fi
+}
+
 # Wait for Joplin container to be fully up and running
-echo "Waiting for Joplin container to be ready..."
-sleep 20
+wait_for_container "joplin-app"
 
 # Get the container ID of the Joplin app
 JOPLIN_CONTAINER_ID=$(sudo docker ps -q -f "ancestor=joplin/server:latest")
