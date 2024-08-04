@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 3.7
+# Version: 3.8
+# Last Modified: 2024-08-04
 
 # Function to install a package if not already installed
 install_if_not_installed() {
@@ -166,6 +167,25 @@ sudo docker pull joplin/server:latest
 
 # Start the Docker containers using Docker Compose
 sudo docker compose -f joplin-docker-compose.yml up -d
+
+# Wait for Joplin container to be fully up and running
+echo "Waiting for Joplin container to be ready..."
+sleep 20
+
+# Get the container ID of the Joplin app
+JOPLIN_CONTAINER_ID=$(sudo docker ps -q -f "ancestor=joplin/server:latest")
+
+# Function to replace NTP server in specified files
+replace_ntp_server() {
+    local file_path=$1
+    local ntp_server="time1.aliyun.com"
+    sudo docker exec -u 0 -it $JOPLIN_CONTAINER_ID /bin/sh -c "sed -i 's|pool.ntp.org|$ntp_server|g' $file_path"
+}
+
+# Replace NTP server in specified files
+replace_ntp_server "/home/joplin/packages/lib/vendor/ntp-client.js"
+replace_ntp_server "/home/joplin/packages/server/src/env.ts"
+replace_ntp_server "/home/joplin/packages/server/dist/env.js"
 
 # Check if the APP_BASE_URL is an IP address or a domain
 if [[ ! "$APP_BASE_URL" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
