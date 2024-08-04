@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Reyanmatic
-# Version: 3.8
+# Version: 3.9
 # Last Modified: 2024-08-04
 
 # Function to install a package if not already installed
