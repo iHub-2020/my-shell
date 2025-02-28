@@ -153,38 +153,43 @@ configure_auto_renew() {
 install_acme_sh() {
   log_info "开始自动安装acme.sh..."
   
-  # 选择下载工具
+  # 选择下载工具并设置静默模式
   local download_cmd
   if command -v curl >/dev/null; then
-    download_cmd="curl -L"
+    download_cmd="curl -sSL"
   elif command -v wget >/dev/null; then
-    download_cmd="wget -O -"
+    download_cmd="wget -qO -"
   else
     log_error "需要 curl 或 wget 来执行安装"
     exit 1
   fi
 
-  # 执行安装流程
-  if $download_cmd https://get.acme.sh | bash -s -- --install-online; then
+  # 执行安装流程（使用官方推荐参数）
+  if $download_cmd https://get.acme.sh | bash -s -- --install; then
+    # 加载环境变量
     export PATH="$HOME/.acme.sh:$PATH"
+    source ~/.bashrc >/dev/null 2>&1
+    
+    # 二次验证安装结果
+    if ! command -v acme.sh >/dev/null; then
+      log_error "acme.sh未正确安装"
+      exit 1
+    fi
     log_success "acme.sh安装完成"
   else
     log_error "acme.sh安装失败"
-    exit 1
-  fi
-
-  if ! command -v acme.sh >/dev/null; then
-    log_error "acme.sh未正确安装"
     exit 1
   fi
 }
 
 # 修改后的依赖检查 ---------------------------------------------
 check_dependencies() {
+  # 检查acme.sh
   if ! command -v acme.sh >/dev/null 2>&1; then
     install_acme_sh
   fi
 
+  # 检查系统工具
   local required_tools=(lsof ps kill mkdir chmod)
   for tool in "${required_tools[@]}"; do
     if ! command -v $tool >/dev/null; then
@@ -198,10 +203,13 @@ check_dependencies() {
 main() {
   trap 'restore_processes' EXIT
 
+  # 依赖检查
   check_dependencies
 
+  # 邮箱验证
   validate_email "${DEFAULT_EMAIL}"
 
+  # 用户输入
   read -rp "请输入申请证书的域名（例如：example.com）：" domain
   validate_domain "${domain}"
 
@@ -211,22 +219,29 @@ main() {
   read -rp "请输入证书文件名（默认：${domain}.crt）：" crt_file
   crt_file=${crt_file:-"${domain}.crt"}
 
+  # 端口检查
   check_port 80
   check_port 443
 
+  # 初始化环境
   setup_cert_dir
 
+  # 注册账户（首次需要）
   if [ ! -f ~/.acme.sh/account.conf ]; then
     log_info "注册ACME账户..."
     acme.sh --register-account -m "${DEFAULT_EMAIL}"
   fi
 
+  # 设置证书颁发机构
   acme.sh --set-default-ca --server "${ACME_SERVER}"
 
+  # 申请安装证书
   install_certificate "${domain}" "${key_file}" "${crt_file}"
   
+  # 配置自动续期
   configure_auto_renew
 
+  # 最终输出
   log_success "SSL证书部署完成！"
   echo -e "证书路径：\n私钥文件：${CERT_DIR}/${key_file}\n证书文件：${CERT_DIR}/${crt_file}"
 }
