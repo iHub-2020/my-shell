@@ -16,7 +16,7 @@ COLOR_RESET='\033[0m'
 
 # 全局变量
 TERMINATED_PROCESSES=()
-DOMAIN=""  # 新增域名变量
+DOMAIN=""
 # ================================================================
 
 # 日志函数 ------------------------------------------------------
@@ -48,31 +48,30 @@ check_port() {
   if pid=$(lsof -i :"${port}" -sTCP:LISTEN -t 2>/dev/null); then
     local process_info
     process_info=$(ps -p "${pid}" -o comm=,pid=)
-    log_warn "端口 ${port} 被进程占用: ${process_info}"
+    log_warn "端口 ${port} 被进程占用: ${process_info} (PID: ${pid})"
     
-    # 非交互模式自动跳过
-    if [ ! -t 0 ]; then
-      log_error "非交互模式下无法处理端口占用，请手动解决后重试"
+    if [ -t 0 ]; then
+      read -rp "是否暂停此进程？[Y/n] " choice
+      case "${choice:-Y}" in
+        y|Y)
+          log_info "正在暂停进程 ${pid}..."
+          if kill -STOP "${pid}"; then
+            TERMINATED_PROCESSES+=("${pid}")
+            log_success "进程 ${pid} 已暂停"
+          else
+            log_error "进程暂停失败"
+            return 1
+          fi
+          ;;
+        *)
+          log_error "操作已取消"
+          return 1
+          ;;
+      esac
+    else
+      log_error "非交互模式检测到端口占用，自动跳过处理"
       return 1
     fi
-
-    read -rp "是否暂停此进程？[Y/n] " choice
-    case "${choice:-Y}" in
-      y|Y)
-        log_info "正在暂停进程 ${pid}..."
-        if kill -STOP "${pid}"; then
-          TERMINATED_PROCESSES+=("${pid}")
-          log_success "进程 ${pid} 已暂停"
-        else
-          log_error "进程暂停失败"
-          return 1
-        fi
-        ;;
-      *)
-        log_error "操作已取消"
-        return 1
-        ;;
-    esac
   else
     log_success "端口 ${port} 可用"
   fi
@@ -107,16 +106,20 @@ install_certificate() {
   
   log_info "开始申请SSL证书（CA: ${ACME_SERVER}）..."
   
-  # 申请证书
-  if ~/.acme.sh/acme.sh --issue --server "${ACME_SERVER}" \
-             -d "${domain}" \
-             --standalone \
-             -k ec-256; then
-    log_success "证书申请成功"
-  else
-    log_error "证书申请失败"
-    return 1
-  fi
+  # 申请证书（增加重试机制）
+  for i in {1..3}; do
+    if ~/.acme.sh/acme.sh --issue --server "${ACME_SERVER}" \
+               -d "${domain}" \
+               --standalone \
+               -k ec-256; then
+      log_success "证书申请成功"
+      break
+    else
+      log_warn "证书申请失败，第${i}次重试..."
+      sleep 5
+      [[ $i -eq 3 ]] && log_error "证书申请失败" && return 1
+    fi
+  done
 
   # 安装证书
   log_info "正在安装证书到指定路径..."
@@ -157,13 +160,17 @@ configure_auto_renew() {
 install_acme_sh() {
   log_info "开始自动安装acme.sh..."
   
-  # 安装系统依赖
+  # 安装系统依赖（兼容Debian 10-12）
   export DEBIAN_FRONTEND=noninteractive
-  if ! command -v curl >/dev/null; then
-    apt-get update -qq && apt-get install -y -qq curl
-  fi
+  apt-get update -qq
+  apt-get install -y -qq \
+    curl \
+    lsof \
+    procps \
+    coreutils \
+    gnupg2
 
-  # 执行标准安装
+  # 执行标准安装（使用官方推荐方式）
   if curl -sSL https://get.acme.sh | bash -s -- ; then
     log_success "acme.sh安装完成"
   else
@@ -179,13 +186,7 @@ main() {
   # 检查root权限
   [[ $EUID -ne 0 ]] && log_error "必须使用root权限运行" && exit 1
 
-  # 自动安装
-  install_acme_sh || exit 1
-
-  # 邮箱验证
-  validate_email "${DEFAULT_EMAIL}" || exit 1
-
-  # 域名处理（支持命令行参数）
+  # 域名参数检查
   if [ -z "$1" ]; then
     if [ -t 0 ]; then
       read -rp "请输入申请证书的域名（例如：example.com）：" DOMAIN
@@ -199,9 +200,11 @@ main() {
   fi
   validate_domain "${DOMAIN}" || exit 1
 
-  # 自动生成文件名
-  KEY_FILE="${DOMAIN}.key"
-  CRT_FILE="${DOMAIN}.crt"
+  # 自动安装
+  install_acme_sh || exit 1
+
+  # 邮箱验证
+  validate_email "${DEFAULT_EMAIL}" || exit 1
 
   # 端口检查（非交互模式自动跳过）
   check_port 80 || exit 1
@@ -220,14 +223,14 @@ main() {
   ~/.acme.sh/acme.sh --set-default-ca --server "${ACME_SERVER}" || exit 1
 
   # 申请证书
-  install_certificate "${DOMAIN}" "${KEY_FILE}" "${CRT_FILE}" || exit 1
+  install_certificate "${DOMAIN}" "${DOMAIN}.key" "${DOMAIN}.crt" || exit 1
   
   # 配置续期
   configure_auto_renew || exit 1
 
   # 输出结果
   log_success "SSL证书部署完成！"
-  echo -e "证书路径：\n私钥文件：${CERT_DIR}/${KEY_FILE}\n证书文件：${CERT_DIR}/${CRT_FILE}"
+  echo -e "证书路径：\n私钥文件：${CERT_DIR}/${DOMAIN}.key\n证书文件：${CERT_DIR}/${DOMAIN}.crt"
 }
 
 # 执行入口（支持带参数运行）
