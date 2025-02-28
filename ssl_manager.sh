@@ -149,32 +149,32 @@ configure_auto_renew() {
   fi
 }
 
-# 新增的自动安装函数 --------------------------------------------
+# 新增自动安装模块 ---------------------------------------------
 install_acme_sh() {
   log_info "开始自动安装acme.sh..."
   
   # 选择下载工具
-  if command -v curl >/dev/null 2>&1; then
-    _get="curl -L"
-  elif command -v wget >/dev/null 2>&1; then
-    _get="wget -O -"
+  local download_cmd
+  if command -v curl >/dev/null; then
+    download_cmd="curl -L"
+  elif command -v wget >/dev/null; then
+    download_cmd="wget -O -"
   else
     log_error "需要 curl 或 wget 来执行安装"
     exit 1
   fi
 
-  # 执行安装流程
-  if ! $_get https://get.acme.sh | sh -s -- --install-online; then
+  # 执行安装流程（修复参数传递问题）
+  if $download_cmd https://get.acme.sh | bash -s -- --install; then
+    source ~/.bashrc
+    log_success "acme.sh安装完成"
+  else
     log_error "acme.sh安装失败"
     exit 1
   fi
-  
-  # 刷新环境变量
-  source ~/.bashrc
-  log_success "acme.sh安装完成"
 }
 
-# 修改后的依赖检查部分 ------------------------------------------
+# 修改后的依赖检查 ---------------------------------------------
 check_dependencies() {
   # 检查acme.sh
   if ! command -v acme.sh >/dev/null 2>&1; then
@@ -195,7 +195,7 @@ check_dependencies() {
 main() {
   trap 'restore_processes' EXIT
 
-  # 依赖检查（新增自动安装）
+  # 依赖检查
   check_dependencies
 
   # 邮箱验证
