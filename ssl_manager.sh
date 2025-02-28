@@ -16,6 +16,7 @@ COLOR_RESET='\033[0m'
 
 # 全局变量
 TERMINATED_PROCESSES=()
+INTERFERED_PROCS=()  # 用于保存被冻结的干涉进程PID
 # ================================================================
 
 # 增强型日志函数 ------------------------------------------------
@@ -37,6 +38,39 @@ validate_domain() {
     log_error "域名格式无效: $1"
     exit 1
   }
+}
+
+# 自动冻结干涉进程（如 nginx） -----------------------------------
+suspend_interfering_processes() {
+  local interfering_process="nginx"  # 这里泛指可能干涉申请证书的进程，可根据需要修改或扩展
+  local pids
+  pids=$(pgrep "$interfering_process" || true)
+  if [ -n "$pids" ]; then
+    for pid in $pids; do
+      if kill -STOP "$pid" 2>/dev/null; then
+        log_info "已冻结干涉进程 $interfering_process (PID: $pid)"
+        INTERFERED_PROCS+=("$pid")
+      fi
+    done
+  else
+    log_info "未检测到干涉进程 $interfering_process"
+  fi
+}
+
+# 恢复之前被冻结的干涉进程 ---------------------------------------
+resume_interfering_processes() {
+  local interfering_process="nginx"
+  if [ ${#INTERFERED_PROCS[@]} -gt 0 ]; then
+    for pid in "${INTERFERED_PROCS[@]}"; do
+      if kill -CONT "$pid" 2>/dev/null; then
+        log_info "已恢复干涉进程 $interfering_process (PID: $pid)"
+      else
+        log_warn "恢复干涉进程 (PID: $pid) 失败，可能该进程已退出"
+      fi
+    done
+    # 清空数组，以防后续误用
+    INTERFERED_PROCS=()
+  fi
 }
 
 # 智能端口管理 -------------------------------------------------
@@ -63,23 +97,7 @@ smart_port_check() {
 
   if [ -n "$pid" ]; then
     log_warn "端口 ${port} 被进程占用 (PID: $pid)"
-    read -rp "是否暂停此进程？[Y/n] " choice
-    case "${choice:-Y}" in
-      y|Y)
-        log_info "正在智能暂停进程..."
-        if kill -STOP "$pid"; then
-          TERMINATED_PROCESSES+=("$pid")
-          log_success "进程已冻结"
-        else
-          log_error "进程操作失败，错误码: $?"
-          return 1
-        fi
-        ;;
-      *)
-        log_error "操作中断"
-        return 1
-        ;;
-    esac
+    return 1
   else
     log_success "端口 ${port} 畅通"
   fi
@@ -124,25 +142,33 @@ certificate_orchestrator() {
   validate_domain "$domain"
   log_info "启动智能证书编排系统，为域名: $domain"
   
-  local max_retries=5
-  local retry_delay=10
+  # 如果检测到端口占用或出现 nginx 干涉，自动冻结干涉进程
+  suspend_interfering_processes
   
-  for ((i=1; i<=max_retries; i++)); do
+  local max_retries=3
+  local retry_delay=10
+  local attempt=1
+
+  while [ $attempt -le $max_retries ]; do
     if ~/.acme.sh/acme.sh --issue --server "${ACME_SERVER}" \
-               -d "${domain}" \
-               --standalone \
-               -k ec-256; then
+         -d "${domain}" \
+         --standalone \
+         -k ec-256; then
+      log_success "证书申请成功"
       break
     else
-      log_warn "证书申请异常，正在启动第 ${i} 次重试..."
-      sleep $((retry_delay * 2 ** (i-1)))
-      if [ $i -eq $max_retries ]; then
-        log_error "关键错误：证书申请永久失败"
+      log_warn "证书申请异常，第 $attempt 次尝试失败..."
+      if [ $attempt -eq $max_retries ]; then
+        log_error "关键错误：证书申请尝试 3 次均失败"
+        resume_interfering_processes
         return 1
       fi
+      sleep $((retry_delay * 2 ** (attempt-1)))
+      attempt=$((attempt+1))
     fi
   done
 
+  # 安装证书（安装成功后依然恢复干涉进程）
   ~/.acme.sh/acme.sh --install-cert -d "${domain}" --ecc \
     --key-file "${CERT_DIR}/${domain}.key" \
     --fullchain-file "${CERT_DIR}/${domain}.crt" \
@@ -151,9 +177,12 @@ certificate_orchestrator() {
 
   if ! openssl x509 -in "${CERT_DIR}/${domain}.crt" -noout -subject -dates >/dev/null; then
     log_error "证书完整性校验失败"
+    resume_interfering_processes
     return 1
   fi
 
+  # 无论成功与否，都恢复之前被冻结进程
+  resume_interfering_processes
   log_success "证书申请及安装成功"
 }
 
@@ -197,7 +226,7 @@ main() {
 
   mkdir -p "${CERT_DIR}"
 
-  # 请将 “yourdomain.com” 替换为实际需要申请证书的域名
+  # 请将 "yourdomain.com" 替换为实际需要申请证书的域名
   certificate_orchestrator "yourdomain.com" || exit 1
 }
 
