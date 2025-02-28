@@ -4,7 +4,7 @@ set -eo pipefail
 # 配置区（根据需求修改）===========================================
 CERT_DIR="/root/cert"                  # 证书存储路径
 DEFAULT_EMAIL="admin@yourdomain.com"   # 管理员邮箱（接收通知）
-ACME_SERVER="letsencrypt"              # 证书颁发机构
+ACME_SERVER="letsencrypt"              # 证书颁发机构：letsencrypt/letsencrypt_test
 NOTICE_DAYS_BEFORE_EXPIRE=7            # 证书过期前提醒天数
 
 # 颜色定义
@@ -164,13 +164,13 @@ install_acme_sh() {
     exit 1
   fi
 
-  # 执行标准安装流程
+  # 执行安装流程
   if $download_cmd https://get.acme.sh | bash -s -- ; then
-    # 环境配置
+    # 加载环境变量
     export PATH="$HOME/.acme.sh:$PATH"
     source ~/.bashrc >/dev/null 2>&1
-
-    # 安装验证
+    
+    # 二次验证安装结果
     if ! command -v acme.sh >/dev/null; then
       log_error "acme.sh未正确安装"
       exit 1
