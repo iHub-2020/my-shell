@@ -164,12 +164,20 @@ install_acme_sh() {
     exit 1
   fi
 
-  # 执行安装流程（修复参数传递问题）
-  if $download_cmd https://get.acme.sh | bash -s -- --install; then
-    source ~/.bashrc
+  # 执行安装流程（修复参数格式）
+  if $download_cmd https://get.acme.sh | bash -s -- --install-online; then
+    # 加载环境变量
+    export PATH="$HOME/.acme.sh:$PATH"
+    source ~/.bashrc >/dev/null 2>&1
     log_success "acme.sh安装完成"
   else
     log_error "acme.sh安装失败"
+    exit 1
+  fi
+
+  # 二次验证安装结果
+  if ! command -v acme.sh >/dev/null; then
+    log_error "acme.sh未正确安装"
     exit 1
   fi
 }
