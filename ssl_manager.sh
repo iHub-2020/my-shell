@@ -2,10 +2,11 @@
 set -eo pipefail
 
 # 配置区（根据需求修改）===========================================
-CERT_DIR="/root/cert"                    # 证书存储路径
-DEFAULT_EMAIL="admin@yourdomain.com"     # 管理员邮箱（接收通知）
-ACME_SERVER="letsencrypt"                # 证书颁发机构（letsencrypt/letsencrypt_test）
-NOTICE_DAYS_BEFORE_EXPIRE=7              # 证书过期前提醒天数
+CERT_DIR="/root/cert"                  # 证书存储路径
+DEFAULT_EMAIL="admin@yourdomain.com"   # 管理员邮箱（接收通知）
+ACME_SERVER="letsencrypt"              # 证书颁发机构：letsencrypt/letsencrypt_test
+NOTICE_DAYS_BEFORE_EXPIRE=7            # 证书过期前提醒天数
+# ======================================================================
 
 # 颜色定义
 COLOR_INFO='\033[34m'
@@ -15,10 +16,7 @@ COLOR_ERROR='\033[31m'
 COLOR_RESET='\033[0m'
 
 # 全局变量
-TERMINATED_PROCESSES=()                  # 用于通过 kill -STOP 暂停的进程
-STOPPED_SERVICES=()                      # 用于记录通过 systemctl 停止的服务（如 nginx）
-
-# ======================================================================
+TERMINATED_PROCESSES=()                # 用于通过 kill -STOP 暂停的进程
 
 # 日志函数 ------------------------------------------------------
 log_info() {
@@ -57,33 +55,15 @@ check_port() {
     local port=$1
     log_info "正在检查端口 ${port} 占用情况..."
 
-    if pid=$(lsof -i :"${port}" -sTCP:LISTEN -t 2>/dev/null); then
-        local process_info
-        process_info=$(ps -p "${pid}" -o comm=,pid=)
-        log_warn "端口 ${port} 被进程占用: ${process_info}"
+    local pids
+    pids=$(lsof -i :"${port}" -sTCP:LISTEN -t 2>/dev/null)
+    if [ -n "$pids" ]; then
+        for pid in $pids; do
+            local process_info
+            process_info=$(ps -p "$pid" -o comm=,pid=)
+            log_warn "端口 ${port} 被进程占用: ${process_info}"
 
-        # 如果占用进程为 nginx，则建议使用 systemctl 停止服务
-        if ps -p "${pid}" -o comm= | grep -q "nginx"; then
-            read -rp "检测到 nginx 占用端口 ${port}，是否停止 nginx 服务？[Y/n] " choice < /dev/tty
-            case "${choice:-Y}" in
-                y|Y)
-                    log_info "正在停止 nginx 服务..."
-                    if systemctl stop nginx; then
-                        STOPPED_SERVICES+=("nginx")
-                        log_success "nginx 服务已停止"
-                    else
-                        log_error "nginx 停止失败"
-                        exit 1
-                    fi
-                    ;;
-                *)
-                    log_error "操作已取消，无法继续申请证书"
-                    exit 1
-                    ;;
-            esac
-        else
-            # 对于其他进程使用 kill -STOP 冻结
-            read -rp "是否暂停该进程 (PID: ${pid})？[Y/n] " choice < /dev/tty
+            read -rp "是否暂停该进程 (PID: ${pid})？[Y/n] " choice
             case "${choice:-Y}" in
                 y|Y)
                     log_info "正在暂停进程 ${pid}..."
@@ -100,37 +80,26 @@ check_port() {
                     exit 1
                     ;;
             esac
-        fi
+        done
     else
         log_success "端口 ${port} 可用"
     fi
 }
 
-# 恢复停止或冻结的进程/服务 ---------------------------------------
+# 恢复停止或冻结的进程 ---------------------------------------
 restore_processes() {
-    # 如果曾使用 systemctl 停止了服务，则重启它们
-    if [ ${#STOPPED_SERVICES[@]} -gt 0 ]; then
-        log_info "正在启动之前停止的服务..."
-        for service in "${STOPPED_SERVICES[@]}"; do
-            if systemctl start "$service"; then
-                log_success "服务 $service 已启动"
-            else
-                log_warn "服务 $service 启动失败"
-            fi
-        done
+    if [ ${#TERMINATED_PROCESSES[@]} -eq 0 ]; then
+        return
     fi
-
-    # 恢复之前通过 kill -STOP 暂停的进程
-    if [ ${#TERMINATED_PROCESSES[@]} -gt 0 ]; then
-        log_info "正在恢复被暂停的进程..."
-        for pid in "${TERMINATED_PROCESSES[@]}"; do
-            if kill -CONT "${pid}" >/dev/null 2>&1; then
-                log_success "进程 ${pid} 已恢复运行"
-            else
-                log_warn "进程 ${pid} 恢复失败（可能已终止）"
-            fi
-        done
-    fi
+  
+    log_info "正在恢复被暂停的进程..."
+    for pid in "${TERMINATED_PROCESSES[@]}"; do
+        if kill -CONT "${pid}" >/dev/null 2>&1; then
+            log_success "进程 ${pid} 已恢复运行"
+        else
+            log_warn "进程 ${pid} 恢复失败（可能已终止）"
+        fi
+    done
 }
 
 # 证书管理函数 -------------------------------------------------
@@ -205,7 +174,6 @@ configure_auto_renew() {
 install_acme_sh() {
     log_info "开始自动安装acme.sh..."
 
-    # 选择下载工具
     local download_cmd
     if command -v curl >/dev/null; then
         download_cmd="curl -sSL"
@@ -216,7 +184,6 @@ install_acme_sh() {
         exit 1
     fi
 
-    # 执行安装流程
     if $download_cmd https://get.acme.sh | bash -s -- ; then
         export PATH="$HOME/.acme.sh:$PATH"
         source ~/.bashrc >/dev/null 2>&1
@@ -233,12 +200,10 @@ install_acme_sh() {
 
 # 依赖检查 -----------------------------------------------------
 check_dependencies() {
-    # 检查 acme.sh
     if ! command -v acme.sh >/dev/null 2>&1; then
         install_acme_sh
     fi
 
-    # 检查系统工具
     local required_tools=(lsof ps kill mkdir chmod)
     for tool in "${required_tools[@]}"; do
         if ! command -v "$tool" >/dev/null; then
@@ -252,7 +217,6 @@ check_dependencies() {
 main() {
     trap 'restore_processes' EXIT
 
-    # 依赖检查
     check_dependencies
 
     # 邮箱验证
@@ -277,7 +241,7 @@ main() {
 
     # 注册账户（首次需要）
     if [ ! -f ~/.acme.sh/account.conf ]; then
-        log_info "注册 ACME 账户..."
+        log_info "注册ACME账户..."
         acme.sh --register-account -m "${DEFAULT_EMAIL}"
     fi
 
@@ -290,7 +254,7 @@ main() {
     # 配置自动续期
     configure_auto_renew
 
-    log_success "SSL 证书部署完成！"
+    log_success "SSL证书部署完成！"
     echo -e "证书路径：\n私钥文件：${CERT_DIR}/${key_file}\n证书文件：${CERT_DIR}/${crt_file}"
 }
 
