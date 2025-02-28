@@ -16,16 +16,15 @@ COLOR_RESET='\033[0m'
 
 # 全局变量
 TERMINATED_PROCESSES=()
-DOMAIN=""
 # ================================================================
 
-# 日志函数 ------------------------------------------------------
+# 增强型日志函数 ------------------------------------------------
 log_info() { echo -e "${COLOR_INFO}[INFO] $*${COLOR_RESET}"; }
 log_success() { echo -e "${COLOR_SUCCESS}[SUCCESS] $*${COLOR_RESET}"; }
 log_warn() { echo -e "${COLOR_WARNING}[WARNING] $*${COLOR_RESET}"; }
 log_error() { echo -e "${COLOR_ERROR}[ERROR] $*${COLOR_RESET}" >&2; }
 
-# 输入验证函数 --------------------------------------------------
+# 输入验证增强模块 ----------------------------------------------
 validate_email() {
   [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || {
     log_error "邮箱格式无效: $1"
@@ -40,177 +39,166 @@ validate_domain() {
   }
 }
 
-# 端口管理函数 -------------------------------------------------
-check_port() {
+# 智能端口管理 -------------------------------------------------
+smart_port_check() {
   local port=$1
-  log_info "正在检查端口 ${port} 占用情况..."
+  log_info "正在深度扫描端口 ${port}..."
   
-  if pid=$(lsof -i :"${port}" -sTCP:LISTEN -t 2>/dev/null); then
-    local process_info
-    process_info=$(ps -p "${pid}" -o comm=,pid=)
-    log_warn "端口 ${port} 被进程占用: ${process_info}"
-    
+  for tool in lsof ss netstat; do
+    if command -v "$tool" >/dev/null; then
+      case $tool in
+        lsof)
+          pid=$(lsof -i :$port -sTCP:LISTEN -t 2>/dev/null)
+          ;;
+        ss)
+          pid=$(ss -ltnpH "sport = :$port" | awk '{print $6}' | cut -d, -f2 | uniq)
+          ;;
+        netstat)
+          pid=$(netstat -tlpn 2>/dev/null | awk -v port=":$port" '$4 ~ port {print $7}' | cut -d/ -f1)
+          ;;
+      esac
+      [ -n "$pid" ] && break
+    fi
+  done
+
+  if [ -n "$pid" ]; then
+    log_warn "端口 ${port} 被进程占用 (PID: $pid)"
     read -rp "是否暂停此进程？[Y/n] " choice
     case "${choice:-Y}" in
       y|Y)
-        log_info "正在暂停进程 ${pid}..."
-        if kill -STOP "${pid}"; then
-          TERMINATED_PROCESSES+=("${pid}")
-          log_success "进程 ${pid} 已暂停"
+        log_info "正在智能暂停进程..."
+        if kill -STOP "$pid"; then
+          TERMINATED_PROCESSES+=("$pid")
+          log_success "进程已冻结"
         else
-          log_error "进程暂停失败"
+          log_error "进程操作失败，错误码: $?"
           return 1
         fi
         ;;
       *)
-        log_error "操作已取消"
+        log_error "操作中断"
         return 1
         ;;
     esac
   else
-    log_success "端口 ${port} 可用"
+    log_success "端口 ${port} 畅通"
   fi
 }
 
-restore_processes() {
-  [[ ${#TERMINATED_PROCESSES[@]} -eq 0 ]] && return
+# 自动化环境修复 -----------------------------------------------
+auto_fix_environment() {
+  log_info "启动系统自愈程序..."
   
-  log_info "正在恢复被暂停的进程..."
-  for pid in "${TERMINATED_PROCESSES[@]}"; do
-    if kill -CONT "${pid}" >/dev/null 2>&1; then
-      log_success "进程 ${pid} 已恢复运行"
-    else
-      log_warn "进程 ${pid} 恢复失败（可能已终止）"
+  mkdir -p /etc/ssl/private
+  chmod 710 /etc/ssl/private
+  
+  echo "nameserver 8.8.8.8" > /etc/resolv.conf
+  echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+  
+  timedatectl set-ntp true
+  systemctl restart systemd-timesyncd
+}
+
+# 网络连通性终极测试 -------------------------------------------
+network_health_check() {
+  log_info "执行全方位网络诊断..."
+  
+  local test_urls=(
+    "https://acme-v02.api.letsencrypt.org"
+    "https://github.com"
+    "https://google.com"
+  )
+  
+  for url in "${test_urls[@]}"; do
+    if ! curl --connect-timeout 10 -Is "$url" >/dev/null; then
+      log_error "网络连通性故障: 无法访问 $url"
+      return 1
     fi
   done
+  log_success "网络状态：优秀"
 }
 
-# 证书管理函数 -------------------------------------------------
-setup_cert_dir() {
-  log_info "初始化证书目录: ${CERT_DIR}"
-  mkdir -p "${CERT_DIR}" || {
-    log_error "目录创建失败，请检查权限"
-    exit 1
-  }
-  chmod 700 "${CERT_DIR}"
-  log_success "目录权限已设置"
-}
-
-install_certificate() {
-  local domain=$1 key_file=$2 crt_file=$3
+# 证书管理增强模块 ---------------------------------------------
+certificate_orchestrator() {
+  local domain=$1
+  validate_domain "$domain"
+  log_info "启动智能证书编排系统，为域名: $domain"
   
-  log_info "开始申请SSL证书（CA: ${ACME_SERVER}）..."
+  local max_retries=5
+  local retry_delay=10
   
-  # 申请证书（增加重试机制）
-  for i in {1..3}; do
+  for ((i=1; i<=max_retries; i++)); do
     if ~/.acme.sh/acme.sh --issue --server "${ACME_SERVER}" \
                -d "${domain}" \
                --standalone \
                -k ec-256; then
-      log_success "证书申请成功"
       break
     else
-      log_warn "证书申请失败，第${i}次重试..."
-      sleep 5
-      [[ $i -eq 3 ]] && log_error "证书申请失败" && return 1
+      log_warn "证书申请异常，正在启动第 ${i} 次重试..."
+      sleep $((retry_delay * 2 ** (i-1)))
+      if [ $i -eq $max_retries ]; then
+        log_error "关键错误：证书申请永久失败"
+        return 1
+      fi
     fi
   done
 
-  # 安装证书
-  log_info "正在安装证书到指定路径..."
   ~/.acme.sh/acme.sh --install-cert -d "${domain}" --ecc \
-    --key-file "${CERT_DIR}/${key_file}" \
-    --fullchain-file "${CERT_DIR}/${crt_file}" \
+    --key-file "${CERT_DIR}/${domain}.key" \
+    --fullchain-file "${CERT_DIR}/${domain}.crt" \
     --reloadcmd "systemctl reload nginx" \
     --renew-hook "echo '证书续期成功！请检查服务状态。' | mail -s '证书更新通知' ${DEFAULT_EMAIL}"
 
-  # 验证文件
-  [[ -f "${CERT_DIR}/${key_file}" && -f "${CERT_DIR}/${crt_file}" ]] || {
-    log_error "证书文件未正确生成"
+  if ! openssl x509 -in "${CERT_DIR}/${domain}.crt" -noout -subject -dates >/dev/null; then
+    log_error "证书完整性校验失败"
     return 1
-  }
+  fi
+
+  log_success "证书申请及安装成功"
 }
 
-# 自动续期配置 -------------------------------------------------
-configure_auto_renew() {
-  log_info "正在配置自动续期..."
+# 系统依赖智能安装 ---------------------------------------------
+dependency_resolver() {
+  log_info "启动智能依赖解析引擎..."
   
-  ~/.acme.sh/acme.sh --upgrade --auto-upgrade
-
-  if ! crontab -l | grep -q "acme.sh --cron"; then
-    log_info "添加自动续期定时任务..."
-    (crontab -l 2>/dev/null; \
-     echo "0 0 * * * \"${HOME}/.acme.sh\"/acme.sh --cron --home \"${HOME}/.acme.sh\"") | crontab -
-  fi
-
-  if crontab -l | grep -q "acme.sh --cron"; then
-    log_success "自动续期已启用（每日0点检查）"
-  else
-    log_error "自动续期配置失败！"
-    return 1
-  fi
-}
-
-# 自动安装模块 -------------------------------------------------
-install_acme_sh() {
-  log_info "开始自动安装acme.sh..."
+  declare -A pkg_map=(
+    ["debian"]="curl lsof procps coreutils gnupg2 systemd"
+    ["ubuntu"]="curl lsof procps coreutils gnupg2 systemd"
+    ["centos"]="curl lsof procps-ng coreutils gnupg2 systemd"
+  )
   
-  # 安装系统依赖
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq && apt-get install -y -qq curl lsof procps
-
-  # 执行标准安装
-  if curl -sSL https://get.acme.sh | bash -s -- ; then
-    log_success "acme.sh安装完成"
-  else
-    log_error "acme.sh安装失败"
+  os_id=$(awk -F= '/^ID=/{print $2}' /etc/os-release | tr -d '"' | tr '[:upper:]' '[:lower:]')
+  
+  if [ -z "${pkg_map[$os_id]}" ]; then
+    log_error "不兼容的操作系统: $os_id"
     return 1
   fi
+  
+  case $os_id in
+    "debian"|"ubuntu")
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq
+      apt-get install -y -qq ${pkg_map[$os_id]}
+      ;;
+    "centos")
+      yum install -y -q ${pkg_map[$os_id]}
+      ;;
+  esac
+  
+  # 安装 acme.sh
+  curl -sSL https://get.acme.sh | bash -s --
 }
 
-# 主程序 -------------------------------------------------------
+# 主流程 ---------------------------------------------------------
 main() {
-  trap 'restore_processes' EXIT
+  dependency_resolver || exit 1
+  auto_fix_environment || exit 1
+  network_health_check || exit 1
 
-  # 检查root权限
-  [[ $EUID -ne 0 ]] && log_error "必须使用root权限运行" && exit 1
+  mkdir -p "${CERT_DIR}"
 
-  # 自动安装
-  install_acme_sh || exit 1
-
-  # 邮箱验证
-  validate_email "${DEFAULT_EMAIL}" || exit 1
-
-  # 用户输入
-  read -rp "请输入申请证书的域名（例如：example.com）：" DOMAIN
-  validate_domain "${DOMAIN}" || exit 1
-
-  # 端口检查
-  check_port 80 || exit 1
-  check_port 443 || exit 1
-
-  # 初始化环境
-  setup_cert_dir || exit 1
-
-  # 账户注册
-  if [ ! -f ~/.acme.sh/account.conf ]; then
-    log_info "注册ACME账户..."
-    ~/.acme.sh/acme.sh --register-account -m "${DEFAULT_EMAIL}" || exit 1
-  fi
-
-  # 设置CA
-  ~/.acme.sh/acme.sh --set-default-ca --server "${ACME_SERVER}" || exit 1
-
-  # 申请证书
-  install_certificate "${DOMAIN}" "${DOMAIN}.key" "${DOMAIN}.crt" || exit 1
-  
-  # 配置续期
-  configure_auto_renew || exit 1
-
-  # 输出结果
-  log_success "SSL证书部署完成！"
-  echo -e "证书路径：\n私钥文件：${CERT_DIR}/${DOMAIN}.key\n证书文件：${CERT_DIR}/${DOMAIN}.crt"
+  # 请将 “yourdomain.com” 替换为实际需要申请证书的域名
+  certificate_orchestrator "yourdomain.com" || exit 1
 }
 
-# 执行入口
 main
