@@ -4,7 +4,7 @@ set -eo pipefail
 # 配置区（根据需求修改）===========================================
 CERT_DIR="/root/cert"                  # 证书存储路径
 DEFAULT_EMAIL="admin@yourdomain.com"   # 管理员邮箱（接收通知）
-ACME_SERVER="letsencrypt"              # 证书颁发机构：letsencrypt/letsencrypt_test
+ACME_SERVER="letsencrypt"              # 证书颁发机构
 NOTICE_DAYS_BEFORE_EXPIRE=7            # 证书过期前提醒天数
 
 # 颜色定义
@@ -58,12 +58,12 @@ check_port() {
           log_success "进程 ${pid} 已暂停"
         else
           log_error "进程暂停失败"
-          exit 1
+          return 1  # 修改为返回错误码而非直接退出
         fi
         ;;
       *)
         log_error "操作已取消"
-        exit 1
+        return 1
         ;;
     esac
   else
@@ -108,7 +108,7 @@ install_certificate() {
     log_success "证书申请成功"
   else
     log_error "证书申请失败"
-    exit 1
+    return 1
   fi
 
   # 安装证书
@@ -122,7 +122,7 @@ install_certificate() {
   # 验证文件
   [[ -f "${CERT_DIR}/${key_file}" && -f "${CERT_DIR}/${crt_file}" ]] || {
     log_error "证书文件未正确生成"
-    exit 1
+    return 1
   }
 }
 
@@ -137,7 +137,7 @@ configure_auto_renew() {
   if ! crontab -l | grep -q "acme.sh --cron"; then
     log_info "添加自动续期定时任务..."
     (crontab -l 2>/dev/null; \
-     echo "0 0 * * * \"${HOME}/.acme.sh\"/acme.sh --cron --home \"${HOME}/.acme.sh\"") | crontab -
+     echo "0 0 * day * \"${HOME}/.acme.sh\"/acme.sh --cron --home \"${HOME}/.acme.sh\"") | crontab -
   fi
 
   # 验证配置
@@ -145,7 +145,7 @@ configure_auto_renew() {
     log_success "自动续期已启用（每日0点检查）"
   else
     log_error "自动续期配置失败！"
-    exit 1
+    return 1
   fi
 }
 
@@ -161,7 +161,7 @@ install_acme_sh() {
     download_cmd="wget -qO -"
   else
     log_error "需要 curl 或 wget 来执行安装"
-    exit 1
+    return 1
   fi
 
   # 执行安装流程
@@ -173,12 +173,12 @@ install_acme_sh() {
     # 二次验证安装结果
     if ! command -v acme.sh >/dev/null; then
       log_error "acme.sh未正确安装"
-      exit 1
+      return 1
     fi
     log_success "acme.sh安装完成"
   else
     log_error "acme.sh安装失败"
-    exit 1
+    return 1
   fi
 }
 
@@ -186,7 +186,10 @@ install_acme_sh() {
 check_dependencies() {
   # 检查acme.sh
   if ! command -v acme.sh >/dev/null 2>&1; then
-    install_acme_sh
+    if ! install_acme_sh; then
+      log_error "依赖检查失败"
+      return 1
+    fi
   fi
 
   # 检查系统工具
@@ -194,7 +197,7 @@ check_dependencies() {
   for tool in "${required_tools[@]}"; do
     if ! command -v $tool >/dev/null; then
       log_error "缺少系统依赖: $tool"
-      exit 1
+      return 1
     fi
   done
 }
@@ -204,14 +207,16 @@ main() {
   trap 'restore_processes' EXIT
 
   # 依赖检查
-  check_dependencies
+  if ! check_dependencies; then
+    exit 1
+  fi
 
   # 邮箱验证
-  validate_email "${DEFAULT_EMAIL}"
+  validate_email "${DEFAULT_EMAIL}" || exit 1
 
   # 用户输入
   read -rp "请输入申请证书的域名（例如：example.com）：" domain
-  validate_domain "${domain}"
+  validate_domain "${domain}" || exit 1
 
   read -rp "请输入私钥文件名（默认：${domain}.key）：" key_file
   key_file=${key_file:-"${domain}.key"}
@@ -220,26 +225,30 @@ main() {
   crt_file=${crt_file:-"${domain}.crt"}
 
   # 端口检查
-  check_port 80
-  check_port 443
+  check_port 80 || exit 1
+  check_port 443 || exit 1
 
   # 初始化环境
-  setup_cert_dir
+  setup_cert_dir || exit 1
 
   # 注册账户（首次需要）
   if [ ! -f ~/.acme.sh/account.conf ]; then
     log_info "注册ACME账户..."
-    acme.sh --register-account -m "${DEFAULT_EMAIL}"
+    acme.sh --register-account -m "${DEFAULT_EMAIL}" || exit 1
   fi
 
   # 设置证书颁发机构
-  acme.sh --set-default-ca --server "${ACME_SERVER}"
+  acme.sh --set-default-ca --server "${ACME_SERVER}" || exit 1
 
   # 申请安装证书
-  install_certificate "${domain}" "${key_file}" "${crt_file}"
+  if ! install_certificate "${domain}" "${key_file}" "${crt_file}"; then
+    exit 1
+  fi
   
   # 配置自动续期
-  configure_auto_renew
+  if ! configure_auto_renew; then
+    exit 1
+  fi
 
   # 最终输出
   log_success "SSL证书部署完成！"
