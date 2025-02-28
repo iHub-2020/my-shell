@@ -16,6 +16,7 @@ COLOR_RESET='\033[0m'
 
 # 全局变量
 TERMINATED_PROCESSES=()
+DOMAIN=""  # 新增域名变量
 # ================================================================
 
 # 日志函数 ------------------------------------------------------
@@ -49,29 +50,29 @@ check_port() {
     process_info=$(ps -p "${pid}" -o comm=,pid=)
     log_warn "端口 ${port} 被进程占用: ${process_info}"
     
-    # 交互式处理
-    if [ -t 0 ]; then
-      read -t 30 -rp "是否暂停此进程？[Y/n] (30秒后自动继续) " choice || choice="Y"
-      case "${choice:-Y}" in
-        y|Y)
-          log_info "正在暂停进程 ${pid}..."
-          if kill -STOP "${pid}"; then
-            TERMINATED_PROCESSES+=("${pid}")
-            log_success "进程 ${pid} 已暂停"
-          else
-            log_error "进程暂停失败"
-            return 1
-          fi
-          ;;
-        *)
-          log_error "操作已取消，请手动解决端口冲突后重试"
-          return 1
-          ;;
-      esac
-    else
-      log_error "检测到非交互式运行，已自动跳过端口占用处理"
+    # 非交互模式自动跳过
+    if [ ! -t 0 ]; then
+      log_error "非交互模式下无法处理端口占用，请手动解决后重试"
       return 1
     fi
+
+    read -rp "是否暂停此进程？[Y/n] " choice
+    case "${choice:-Y}" in
+      y|Y)
+        log_info "正在暂停进程 ${pid}..."
+        if kill -STOP "${pid}"; then
+          TERMINATED_PROCESSES+=("${pid}")
+          log_success "进程 ${pid} 已暂停"
+        else
+          log_error "进程暂停失败"
+          return 1
+        fi
+        ;;
+      *)
+        log_error "操作已取消"
+        return 1
+        ;;
+    esac
   else
     log_success "端口 ${port} 可用"
   fi
@@ -106,7 +107,7 @@ install_certificate() {
   
   log_info "开始申请SSL证书（CA: ${ACME_SERVER}）..."
   
-  # 使用绝对路径调用acme.sh
+  # 申请证书
   if ~/.acme.sh/acme.sh --issue --server "${ACME_SERVER}" \
              -d "${domain}" \
              --standalone \
@@ -117,6 +118,7 @@ install_certificate() {
     return 1
   fi
 
+  # 安装证书
   log_info "正在安装证书到指定路径..."
   ~/.acme.sh/acme.sh --install-cert -d "${domain}" --ecc \
     --key-file "${CERT_DIR}/${key_file}" \
@@ -124,6 +126,7 @@ install_certificate() {
     --reloadcmd "systemctl reload nginx" \
     --renew-hook "echo '证书续期成功！请检查服务状态。' | mail -s '证书更新通知' ${DEFAULT_EMAIL}"
 
+  # 验证文件
   [[ -f "${CERT_DIR}/${key_file}" && -f "${CERT_DIR}/${crt_file}" ]] || {
     log_error "证书文件未正确生成"
     return 1
@@ -154,23 +157,11 @@ configure_auto_renew() {
 install_acme_sh() {
   log_info "开始自动安装acme.sh..."
   
-  # Debian 10 软件源更新
-  apt-get update -q=2 || {
-    log_error "软件源更新失败"
-    return 1
-  }
-
-  # 安装必要工具
-  local required_tools=(curl lsof procps coreutils)
-  for tool in "${required_tools[@]}"; do
-    if ! dpkg -s "$tool" >/dev/null 2>&1; then
-      log_info "安装系统依赖: $tool"
-      apt-get install -y "$tool" || {
-        log_error "安装 $tool 失败"
-        return 1
-      }
-    fi
-  done
+  # 安装系统依赖
+  export DEBIAN_FRONTEND=noninteractive
+  if ! command -v curl >/dev/null; then
+    apt-get update -qq && apt-get install -y -qq curl
+  fi
 
   # 执行标准安装
   if curl -sSL https://get.acme.sh | bash -s -- ; then
@@ -185,40 +176,38 @@ install_acme_sh() {
 main() {
   trap 'restore_processes' EXIT
 
-  # 检查用户权限
-  if [[ $EUID -ne 0 ]]; then
-    log_error "必须使用root权限运行此脚本"
-    exit 1
-  fi
+  # 检查root权限
+  [[ $EUID -ne 0 ]] && log_error "必须使用root权限运行" && exit 1
 
-  # 自动安装依赖
-  if ! install_acme_sh; then
-    exit 1
-  fi
+  # 自动安装
+  install_acme_sh || exit 1
 
   # 邮箱验证
   validate_email "${DEFAULT_EMAIL}" || exit 1
 
-  # 交互式输入处理
-  if [ -t 0 ]; then
-    read -rp "请输入申请证书的域名（例如：example.com）：" domain
-    validate_domain "${domain}" || exit 1
-
-    read -rp "请输入私钥文件名（默认：${domain}.key）：" key_file
-    key_file=${key_file:-"${domain}.key"}
-
-    read -rp "请输入证书文件名（默认：${domain}.crt）：" crt_file
-    crt_file=${crt_file:-"${domain}.crt"}
+  # 域名处理（支持命令行参数）
+  if [ -z "$1" ]; then
+    if [ -t 0 ]; then
+      read -rp "请输入申请证书的域名（例如：example.com）：" DOMAIN
+    else
+      log_error "非交互模式必须通过参数指定域名"
+      echo "用法: curl -sSL 脚本URL | bash -s -- 域名"
+      exit 1
+    fi
   else
-    log_error "非交互模式需要预设域名参数"
-    exit 1
+    DOMAIN="$1"
   fi
+  validate_domain "${DOMAIN}" || exit 1
 
-  # 端口检查（带超时自动处理）
+  # 自动生成文件名
+  KEY_FILE="${DOMAIN}.key"
+  CRT_FILE="${DOMAIN}.crt"
+
+  # 端口检查（非交互模式自动跳过）
   check_port 80 || exit 1
   check_port 443 || exit 1
 
-  # 初始化证书目录
+  # 初始化环境
   setup_cert_dir || exit 1
 
   # 账户注册
@@ -227,19 +216,19 @@ main() {
     ~/.acme.sh/acme.sh --register-account -m "${DEFAULT_EMAIL}" || exit 1
   fi
 
-  # 设置证书颁发机构
+  # 设置CA
   ~/.acme.sh/acme.sh --set-default-ca --server "${ACME_SERVER}" || exit 1
 
   # 申请证书
-  install_certificate "${domain}" "${key_file}" "${crt_file}" || exit 1
+  install_certificate "${DOMAIN}" "${KEY_FILE}" "${CRT_FILE}" || exit 1
   
-  # 配置自动续期
+  # 配置续期
   configure_auto_renew || exit 1
 
-  # 最终输出
+  # 输出结果
   log_success "SSL证书部署完成！"
-  echo -e "证书路径：\n私钥文件：${CERT_DIR}/${key_file}\n证书文件：${CERT_DIR}/${crt_file}"
+  echo -e "证书路径：\n私钥文件：${CERT_DIR}/${KEY_FILE}\n证书文件：${CERT_DIR}/${CRT_FILE}"
 }
 
-# 执行入口
+# 执行入口（支持带参数运行）
 main "$@"
