@@ -48,30 +48,25 @@ check_port() {
   if pid=$(lsof -i :"${port}" -sTCP:LISTEN -t 2>/dev/null); then
     local process_info
     process_info=$(ps -p "${pid}" -o comm=,pid=)
-    log_warn "端口 ${port} 被进程占用: ${process_info} (PID: ${pid})"
+    log_warn "端口 ${port} 被进程占用: ${process_info}"
     
-    if [ -t 0 ]; then
-      read -rp "是否暂停此进程？[Y/n] " choice
-      case "${choice:-Y}" in
-        y|Y)
-          log_info "正在暂停进程 ${pid}..."
-          if kill -STOP "${pid}"; then
-            TERMINATED_PROCESSES+=("${pid}")
-            log_success "进程 ${pid} 已暂停"
-          else
-            log_error "进程暂停失败"
-            return 1
-          fi
-          ;;
-        *)
-          log_error "操作已取消"
+    read -rp "是否暂停此进程？[Y/n] " choice
+    case "${choice:-Y}" in
+      y|Y)
+        log_info "正在暂停进程 ${pid}..."
+        if kill -STOP "${pid}"; then
+          TERMINATED_PROCESSES+=("${pid}")
+          log_success "进程 ${pid} 已暂停"
+        else
+          log_error "进程暂停失败"
           return 1
-          ;;
-      esac
-    else
-      log_error "非交互模式检测到端口占用，自动跳过处理"
-      return 1
-    fi
+        fi
+        ;;
+      *)
+        log_error "操作已取消"
+        return 1
+        ;;
+    esac
   else
     log_success "端口 ${port} 可用"
   fi
@@ -160,17 +155,11 @@ configure_auto_renew() {
 install_acme_sh() {
   log_info "开始自动安装acme.sh..."
   
-  # 安装系统依赖（兼容Debian 10-12）
+  # 安装系统依赖
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq
-  apt-get install -y -qq \
-    curl \
-    lsof \
-    procps \
-    coreutils \
-    gnupg2
+  apt-get update -qq && apt-get install -y -qq curl lsof procps
 
-  # 执行标准安装（使用官方推荐方式）
+  # 执行标准安装
   if curl -sSL https://get.acme.sh | bash -s -- ; then
     log_success "acme.sh安装完成"
   else
@@ -186,27 +175,17 @@ main() {
   # 检查root权限
   [[ $EUID -ne 0 ]] && log_error "必须使用root权限运行" && exit 1
 
-  # 域名参数检查
-  if [ -z "$1" ]; then
-    if [ -t 0 ]; then
-      read -rp "请输入申请证书的域名（例如：example.com）：" DOMAIN
-    else
-      log_error "非交互模式必须通过参数指定域名"
-      echo "用法: curl -sSL 脚本URL | bash -s -- 域名"
-      exit 1
-    fi
-  else
-    DOMAIN="$1"
-  fi
-  validate_domain "${DOMAIN}" || exit 1
-
   # 自动安装
   install_acme_sh || exit 1
 
   # 邮箱验证
   validate_email "${DEFAULT_EMAIL}" || exit 1
 
-  # 端口检查（非交互模式自动跳过）
+  # 用户输入
+  read -rp "请输入申请证书的域名（例如：example.com）：" DOMAIN
+  validate_domain "${DOMAIN}" || exit 1
+
+  # 端口检查
   check_port 80 || exit 1
   check_port 443 || exit 1
 
@@ -233,5 +212,5 @@ main() {
   echo -e "证书路径：\n私钥文件：${CERT_DIR}/${DOMAIN}.key\n证书文件：${CERT_DIR}/${DOMAIN}.crt"
 }
 
-# 执行入口（支持带参数运行）
-main "$@"
+# 执行入口
+main
