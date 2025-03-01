@@ -22,15 +22,12 @@ TERMINATED_PROCESSES=()
 log_info() {
   echo -e "${COLOR_INFO}[INFO] $*${COLOR_RESET}"
 }
-
 log_success() {
   echo -e "${COLOR_SUCCESS}[SUCCESS] $*${COLOR_RESET}"
 }
-
 log_warn() {
   echo -e "${COLOR_WARNING}[WARNING] $*${COLOR_RESET}"
 }
-
 log_error() {
   echo -e "${COLOR_ERROR}[ERROR] $*${COLOR_RESET}" >&2
 }
@@ -42,7 +39,6 @@ validate_email() {
     exit 1
   }
 }
-
 validate_domain() {
   [[ "$1" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]] || {
     log_error "域名格式无效: $1"
@@ -50,7 +46,7 @@ validate_domain() {
   }
 }
 
-# 端口管理函数
+# 端口管理函数（含 nginx 特殊处理）
 check_port() {
   local port=$1
   log_info "【步骤X】检查端口 ${port} 占用情况..."
@@ -63,33 +59,53 @@ check_port() {
         log_warn "跳过无效PID: $pid"
         continue
       fi
-      
-      local process_info
-      process_info=$(ps -p "$pid" -o comm=,pid= 2>/dev/null)
-      if [ -z "$process_info" ]; then
+
+      local proc_name
+      proc_name=$(ps -p "$pid" -o comm= 2>/dev/null)
+      if [ -z "$proc_name" ]; then
         log_warn "无法获取进程 $pid 的信息（可能已终止）"
         continue
       fi
-      
-      log_warn "端口 ${port} 被进程占用: ${process_info}"
-      
-      read -rp "是否暂停该进程 (PID: ${pid})？[Y/n] " choice
-      case "${choice:-Y}" in
-        y|Y)
-          log_info "正在暂停进程 ${pid}..."
-          if kill -STOP "${pid}"; then
-            TERMINATED_PROCESSES+=("${pid}")
-            log_success "进程 ${pid} 已暂停"
-          else
-            log_error "进程暂停失败"
+
+      log_warn "端口 ${port} 被进程占用: ${proc_name} (PID: ${pid})"
+
+      # 如果检测到 nginx 占用端口，提示是否停止 nginx 服务
+      if [ "$proc_name" = "nginx" ]; then
+        read -rp "检测到 nginx 占用端口 ${port}，是否停止 nginx 服务？[Y/n] " choice
+        case "${choice:-Y}" in
+          y|Y)
+            log_info "正在停止 nginx 服务..."
+            if systemctl stop nginx; then
+              log_success "nginx 服务已停止"
+            else
+              log_error "停止 nginx 服务失败"
+              exit 1
+            fi
+            ;;
+          *)
+            log_error "操作已取消，无法继续申请证书"
             exit 1
-          fi
-          ;;
-        *)
-          log_error "操作已取消"
-          exit 1
-          ;;
-      esac
+            ;;
+        esac
+      else
+        read -rp "是否暂停该进程 (PID: ${pid})？[Y/n] " choice
+        case "${choice:-Y}" in
+          y|Y)
+            log_info "正在暂停进程 ${pid}..."
+            if kill -STOP "${pid}"; then
+              TERMINATED_PROCESSES+=("${pid}")
+              log_success "进程 ${pid} 已暂停"
+            else
+              log_error "进程暂停失败"
+              exit 1
+            fi
+            ;;
+          *)
+            log_error "操作已取消"
+            exit 1
+            ;;
+        esac
+      fi
     done
   else
     log_success "端口 ${port} 可用"
@@ -121,7 +137,7 @@ install_certificate() {
   local domain=$1
   local key_file=$2
   local crt_file=$3
-  
+
   log_info "【步骤9】开始申请SSL证书（CA: ${ACME_SERVER}）..."
   if acme.sh --issue --server "${ACME_SERVER}" -d "${domain}" --standalone -k ec-256; then
     log_success "SSL证书申请成功"
@@ -129,14 +145,14 @@ install_certificate() {
     log_error "SSL证书申请失败"
     exit 1
   fi
-  
+
   log_info "【步骤9】安装证书到指定路径..."
   acme.sh --install-cert -d "${domain}" --ecc \
     --key-file "${CERT_DIR}/${key_file}" \
     --fullchain-file "${CERT_DIR}/${crt_file}" \
     --reloadcmd "systemctl reload nginx" \
     --renew-hook "echo '证书续期成功！' | mail -s '证书更新通知' ${DEFAULT_EMAIL}"
-  
+
   if [[ -f "${CERT_DIR}/${key_file}" && -f "${CERT_DIR}/${crt_file}" ]]; then
     log_success "证书文件生成成功"
   else
@@ -147,13 +163,13 @@ install_certificate() {
 
 configure_auto_renew() {
   log_info "【步骤10】配置自动续期..."
-  
+
   if acme.sh --upgrade --auto-upgrade; then
     log_success "自动更新已启用"
   else
     log_warn "自动更新启用失败，请检查acme.sh配置"
   fi
-  
+
   if crontab -l 2>/dev/null | grep -q "acme.sh --cron"; then
     log_success "cron定时任务已存在"
   else
