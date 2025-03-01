@@ -73,16 +73,12 @@ pre_check() {
 
   # 1.3 邮箱配置
   step_detail "配置管理员邮箱"
-  read -rp "请输入通知邮箱（默认：$DEFAULT_EMAIL）：" input_email
-  DEFAULT_EMAIL=${input_email:-$DEFAULT_EMAIL}
-  validate_email "$DEFAULT_EMAIL"
-}
-
-validate_email() {
-  [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || {
-    error_mark "邮箱格式无效: $1"
-    exit 1
-  }
+  while true; do
+    read -rp "请输入通知邮箱（默认：$DEFAULT_EMAIL）：" input_email
+    DEFAULT_EMAIL=${input_email:-$DEFAULT_EMAIL}
+    [[ "$DEFAULT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] && break
+    error_mark "邮箱格式无效，请重新输入"
+  done
 }
 
 # 模块2：智能服务管理
@@ -108,6 +104,15 @@ manage_services() {
   else
     success_mark "Nginx服务未运行"
   fi
+
+  # 2.2 端口占用检查
+  step_detail "检查端口占用"
+  for port in 80 443; do
+    if ss -tulpn | grep -q ":${port} "; then
+      error_mark "检测到非Nginx进程占用端口 ${port}"
+      exit 1
+    fi
+  done
 }
 
 # 模块3：证书签发流程
@@ -174,7 +179,7 @@ issue_certificate() {
   # 3.6 服务重载
   if systemctl is-active --quiet nginx; then
     if ! systemctl reload nginx; then
-      error_mark "Nginx重载失败"
+      error_mark "Nginx配置重载失败"
       systemctl status nginx --no-pager
       exit 1
     fi
