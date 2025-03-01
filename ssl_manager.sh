@@ -48,10 +48,10 @@ pre_check() {
   
   # 1.1 权限检查
   step_detail "验证root权限"
-  [ "$(id -u)" -ne 0 ] && {
+  if [ "$(id -u)" -ne 0 ]; then
     error_mark "必须使用root权限运行"
     exit 1
-  }
+  fi
   success_mark "权限验证通过"
 
   # 1.2 依赖检查
@@ -65,10 +65,10 @@ pre_check() {
     fi
   done
   
-  [ $missing_counter -gt 0 ] && {
-    error_mark "缺少 $missing_counter 个关键依赖"
+  if [ $missing_counter -gt 0 ]; then
+    error_mark "缺少 $missing_counter 个关键依赖，请手动安装后重试"
     exit 1
-  }
+  fi
   success_mark "所有依赖已满足"
 
   # 1.3 邮箱配置
@@ -76,8 +76,12 @@ pre_check() {
   while true; do
     read -rp "请输入通知邮箱（默认：$DEFAULT_EMAIL）：" input_email
     DEFAULT_EMAIL=${input_email:-$DEFAULT_EMAIL}
-    [[ "$DEFAULT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] && break
-    error_mark "邮箱格式无效，请重新输入"
+    if [[ "$DEFAULT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+      success_mark "邮箱格式验证通过"
+      break
+    else
+      error_mark "邮箱格式无效，请重新输入"
+    fi
   done
 }
 
@@ -113,6 +117,7 @@ manage_services() {
       exit 1
     fi
   done
+  success_mark "端口未被占用"
 }
 
 # 模块3：证书签发流程
@@ -123,6 +128,7 @@ issue_certificate() {
   while true; do
     read -rp "请输入申请证书的完整域名：" domain </dev/tty
     if [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
+      success_mark "域名格式验证通过"
       break
     else
       error_mark "域名格式无效，请重新输入"
@@ -133,10 +139,12 @@ issue_certificate() {
   local renew_flag=""
   if [ -f "$CERT_DIR/${domain}.key" ]; then
     read -rp "证书文件已存在，是否强制更新？[y/N] " force_renew </dev/tty
-    [[ "${force_renew:-N}" =~ ^[Yy]$ ]] && renew_flag="--force" || {
+    if [[ "${force_renew:-N}" =~ ^[Yy]$ ]]; then
+      renew_flag="--force"
+    else
       success_mark "已跳过现有证书"
       return 0
-    }
+    fi
   fi
 
   # 3.3 签发证书
