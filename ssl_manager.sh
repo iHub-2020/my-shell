@@ -16,7 +16,7 @@ COLOR_ERROR='\033[31m'    # 错误-红色
 COLOR_RESET='\033[0m'     # 重置颜色
 
 # 全局状态变量
-declare -A SERVICE_STATUS
+declare -A SERVICE_STATUS  # 记录服务状态
 CERT_ISSUED=0
 
 # ==================== 可视化步骤函数 ====================
@@ -48,10 +48,10 @@ pre_check() {
   
   # 1.1 权限检查
   step_detail "验证root权限"
-  if [ "$(id -u)" -ne 0 ]; then
+  [ "$(id -u)" -ne 0 ] && {
     error_mark "必须使用root权限运行"
     exit 1
-  fi
+  }
   success_mark "权限验证通过"
 
   # 1.2 依赖检查
@@ -65,24 +65,11 @@ pre_check() {
     fi
   done
   
-  if [ $missing_counter -gt 0 ]; then
-    error_mark "缺少 $missing_counter 个关键依赖，请手动安装后重试"
+  [ $missing_counter -gt 0 ] && {
+    error_mark "缺少 $missing_counter 个关键依赖"
     exit 1
-  fi
+  }
   success_mark "所有依赖已满足"
-
-  # 1.3 邮箱配置
-  step_detail "配置管理员邮箱"
-  while true; do
-    read -rp "请输入通知邮箱（默认：$DEFAULT_EMAIL）：" input_email
-    DEFAULT_EMAIL=${input_email:-$DEFAULT_EMAIL}
-    if [[ "$DEFAULT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
-      success_mark "邮箱格式验证通过"
-      break
-    else
-      error_mark "邮箱格式无效，请重新输入"
-    fi
-  done
 }
 
 # 模块2：智能服务管理
@@ -109,15 +96,20 @@ manage_services() {
     success_mark "Nginx服务未运行"
   fi
 
-  # 2.2 端口占用检查
-  step_detail "检查端口占用"
+  # 2.2 检查其他服务
+  step_detail "检查其他端口占用"
   for port in 80 443; do
-    if ss -tulpn | grep -q ":${port} "; then
-      error_mark "检测到非Nginx进程占用端口 ${port}"
-      exit 1
-    fi
+    local pids=$(ss -ltnpH "sport = :$port" | awk '{print $6}' | cut -d, -f2 | sort -u)
+    [ -z "$pids" ] && continue
+    
+    for pid in $pids; do
+      [[ "$pid" =~ ^[0-9]+$ ]] || continue
+      if [ "$pid" != "1" ]; then  # 排除init进程
+        error_mark "发现非服务进程占用端口 $port (PID:$pid)"
+        exit 1
+      fi
+    done
   done
-  success_mark "端口未被占用"
 }
 
 # 模块3：证书签发流程
@@ -128,29 +120,16 @@ issue_certificate() {
   while true; do
     read -rp "请输入申请证书的完整域名：" domain </dev/tty
     if [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
-      success_mark "域名格式验证通过"
       break
     else
       error_mark "域名格式无效，请重新输入"
     fi
   done
 
-  # 3.2 存在性检测
-  local renew_flag=""
-  if [ -f "$CERT_DIR/${domain}.key" ]; then
-    read -rp "证书文件已存在，是否强制更新？[y/N] " force_renew </dev/tty
-    if [[ "${force_renew:-N}" =~ ^[Yy]$ ]]; then
-      renew_flag="--force"
-    else
-      success_mark "已跳过现有证书"
-      return 0
-    fi
-  fi
-
-  # 3.3 签发证书
+  # 3.2 签发证书
   step_detail "启动证书签发"
   for i in {1..3}; do
-    if ~/.acme.sh/acme.sh --issue $renew_flag --server $ACME_SERVER \
+    if ~/.acme.sh/acme.sh --issue --server $ACME_SERVER \
        -d "$domain" \
        --standalone \
        -k ec-256; then
@@ -167,36 +146,15 @@ issue_certificate() {
     fi
   done
 
-  # 3.4 文件命名
-  step_detail "证书文件命名"
-  read -rp "私钥文件名（默认：$domain.key）：" key_file </dev/tty
-  key_file=${key_file:-"$domain.key"}
-
-  read -rp "证书文件名（默认：$domain.crt）：" crt_file </dev/tty
-  crt_file=${crt_file:-"$domain.crt"}
-
-  # 3.5 安装证书
+  # 3.3 安装证书
   step_detail "安装证书文件"
   mkdir -p "$CERT_DIR" && chmod 700 "$CERT_DIR"
   ~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc \
-    --key-file "$CERT_DIR/$key_file" \
-    --fullchain-file "$CERT_DIR/$crt_file" \
+    --key-file "$CERT_DIR/${domain}.key" \
+    --fullchain-file "$CERT_DIR/${domain}.crt" \
     --reloadcmd "systemctl reload nginx" \
     --renew-hook "echo '证书已更新' | mail -s '证书通知' $DEFAULT_EMAIL"
-
-  # 3.6 服务重载
-  if systemctl is-active --quiet nginx; then
-    if ! systemctl reload nginx; then
-      error_mark "Nginx配置重载失败"
-      systemctl status nginx --no-pager
-      exit 1
-    fi
-  else
-    read -rp "Nginx服务未运行，是否现在启动？[Y/n] " start_nginx </dev/tty
-    if [[ "${start_nginx:-Y}" =~ ^[Yy]$ ]]; then
-      systemctl start nginx || error_mark "Nginx启动失败"
-    fi
-  fi
+  success_mark "证书安装完成"
 }
 
 # 模块4：环境恢复
