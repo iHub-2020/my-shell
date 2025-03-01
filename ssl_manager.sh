@@ -16,7 +16,7 @@ COLOR_ERROR='\033[31m'    # 错误-红色
 COLOR_RESET='\033[0m'     # 重置颜色
 
 # 全局状态变量
-declare -A SERVICE_STATUS  # 记录服务状态
+declare -A SERVICE_STATUS
 CERT_ISSUED=0
 
 # ==================== 可视化步骤函数 ====================
@@ -70,6 +70,19 @@ pre_check() {
     exit 1
   }
   success_mark "所有依赖已满足"
+
+  # 1.3 邮箱配置
+  step_detail "配置管理员邮箱"
+  read -rp "请输入通知邮箱（默认：$DEFAULT_EMAIL）：" input_email
+  DEFAULT_EMAIL=${input_email:-$DEFAULT_EMAIL}
+  validate_email "$DEFAULT_EMAIL"
+}
+
+validate_email() {
+  [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || {
+    error_mark "邮箱格式无效: $1"
+    exit 1
+  }
 }
 
 # 模块2：智能服务管理
@@ -126,10 +139,20 @@ issue_certificate() {
     fi
   done
 
-  # 3.2 签发证书
+  # 3.2 存在性检测
+  local renew_flag=""
+  if [ -f "$CERT_DIR/${domain}.key" ]; then
+    read -rp "证书文件已存在，是否强制更新？[y/N] " force_renew </dev/tty
+    [[ "${force_renew:-N}" =~ ^[Yy]$ ]] && renew_flag="--force" || {
+      success_mark "已跳过现有证书"
+      return 0
+    }
+  fi
+
+  # 3.3 签发证书
   step_detail "启动证书签发"
   for i in {1..3}; do
-    if ~/.acme.sh/acme.sh --issue --server $ACME_SERVER \
+    if ~/.acme.sh/acme.sh --issue $renew_flag --server $ACME_SERVER \
        -d "$domain" \
        --standalone \
        -k ec-256; then
@@ -146,15 +169,36 @@ issue_certificate() {
     fi
   done
 
-  # 3.3 安装证书
+  # 3.4 文件命名
+  step_detail "证书文件命名"
+  read -rp "私钥文件名（默认：$domain.key）：" key_file </dev/tty
+  key_file=${key_file:-"$domain.key"}
+
+  read -rp "证书文件名（默认：$domain.crt）：" crt_file </dev/tty
+  crt_file=${crt_file:-"$domain.crt"}
+
+  # 3.5 安装证书
   step_detail "安装证书文件"
   mkdir -p "$CERT_DIR" && chmod 700 "$CERT_DIR"
   ~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc \
-    --key-file "$CERT_DIR/${domain}.key" \
-    --fullchain-file "$CERT_DIR/${domain}.crt" \
+    --key-file "$CERT_DIR/$key_file" \
+    --fullchain-file "$CERT_DIR/$crt_file" \
     --reloadcmd "systemctl reload nginx" \
     --renew-hook "echo '证书已更新' | mail -s '证书通知' $DEFAULT_EMAIL"
-  success_mark "证书安装完成"
+
+  # 3.6 服务重载
+  if systemctl is-active --quiet nginx; then
+    if ! systemctl reload nginx; then
+      error_mark "Nginx重载失败"
+      systemctl status nginx --no-pager
+      exit 1
+    fi
+  else
+    read -rp "Nginx服务未运行，是否现在启动？[Y/n] " start_nginx </dev/tty
+    if [[ "${start_nginx:-Y}" =~ ^[Yy]$ ]]; then
+      systemctl start nginx || error_mark "Nginx启动失败"
+    fi
+  fi
 }
 
 # 模块4：环境恢复
