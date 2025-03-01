@@ -16,8 +16,8 @@ COLOR_ERROR='\033[31m'    # 错误-红色
 COLOR_RESET='\033[0m'     # 重置颜色
 
 # 全局状态变量
-declare -A SERVICE_STATUS
-CERT_ISSUED=0
+declare -A SERVICE_STATUS  # 服务状态记录
+CERT_ISSUED=0              # 证书签发状态
 
 # ==================== 可视化步骤函数 ====================
 step_begin() {
@@ -108,21 +108,6 @@ manage_services() {
   else
     success_mark "Nginx服务未运行"
   fi
-
-  # 2.2 检查其他服务
-  step_detail "检查其他端口占用"
-  for port in 80 443; do
-    local pids=$(ss -ltnpH "sport = :$port" | awk '{print $6}' | cut -d, -f2 | sort -u)
-    [ -z "$pids" ] && continue
-    
-    for pid in $pids; do
-      [[ "$pid" =~ ^[0-9]+$ ]] || continue
-      if [ "$pid" != "1" ]; then  # 排除init进程
-        error_mark "发现非服务进程占用端口 $port (PID:$pid)"
-        exit 1
-      fi
-    done
-  done
 }
 
 # 模块3：证书签发流程
