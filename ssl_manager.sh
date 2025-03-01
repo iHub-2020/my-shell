@@ -16,8 +16,8 @@ COLOR_ERROR='\033[31m'    # 错误-红色
 COLOR_RESET='\033[0m'     # 重置颜色
 
 # 全局状态变量
-declare -A SERVICE_STATUS  # 服务状态记录
-CERT_ISSUED=0              # 证书签发状态
+declare -A SERVICE_STATUS
+CERT_ISSUED=0
 
 # ==================== 可视化步骤函数 ====================
 step_begin() {
