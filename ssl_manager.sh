@@ -16,8 +16,7 @@ COLOR_ERROR='\033[31m'    # 错误-红色
 COLOR_RESET='\033[0m'     # 重置颜色
 
 # 全局状态变量
-declare -a TERMINATED_PROCESSES
-NGINX_STOPPED=0
+declare -A SERVICE_STATUS  # 记录服务状态
 CERT_ISSUED=0
 
 # ==================== 可视化步骤函数 ====================
@@ -73,57 +72,43 @@ pre_check() {
   success_mark "所有依赖已满足"
 }
 
-# 模块2：智能端口管理
-manage_ports() {
-  step_begin 2 "端口冲突处理"
+# 模块2：智能服务管理
+manage_services() {
+  step_begin 2 "服务状态管理"
 
-  # 2.1 80端口处理
-  step_detail "处理80端口"
-  handle_port 80
-  
-  # 2.2 443端口处理
-  step_detail "处理443端口"
-  handle_port 443
-}
+  # 2.1 检测并停止Nginx
+  step_detail "处理Nginx服务"
+  if systemctl is-active --quiet nginx; then
+    read -rp "  检测到Nginx运行中，是否停止服务？[Y/n] " choice </dev/tty
+    if [[ "${choice:-Y}" =~ ^[Yy]$ ]]; then
+      if systemctl stop nginx; then
+        SERVICE_STATUS["nginx"]="stopped"
+        success_mark "Nginx服务已停止"
+      else
+        error_mark "Nginx停止失败"
+        exit 1
+      fi
+    else
+      error_mark "用户选择保持Nginx运行"
+      exit 1
+    fi
+  else
+    success_mark "Nginx服务未运行"
+  fi
 
-handle_port() {
-  local port=$1
-  local pids=$(ss -ltnpH "sport = :$port" | awk '{print $6}' | cut -d, -f2 | sort -u)
-  
-  for pid in $pids; do
-    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+  # 2.2 检查其他服务
+  step_detail "检查其他端口占用"
+  for port in 80 443; do
+    local pids=$(ss -ltnpH "sport = :$port" | awk '{print $6}' | cut -d, -f2 | sort -u)
+    [ -z "$pids" ] && continue
     
-    local proc_info=$(ps -p $pid -o comm=,args= 2>/dev/null)
-    local proc_name=$(echo "$proc_info" | awk '{print $1}')
-    
-    case $proc_name in
-      nginx)
-        step_detail "检测到Nginx服务 (PID:$pid)"
-        read -rp "  是否暂停Nginx服务？[Y/n] " choice </dev/tty
-        if [[ "${choice:-Y}" =~ ^[Yy]$ ]]; then
-          if systemctl stop nginx; then
-            NGINX_STOPPED=1
-            success_mark "Nginx服务已暂停"
-          else
-            error_mark "Nginx暂停失败"
-            exit 1
-          fi
-        fi
-        ;;
-      *)
-        step_detail "发现进程占用 (PID:$pid)"
-        read -rp "  是否暂停此进程？[Y/n] " choice </dev/tty
-        if [[ "${choice:-Y}" =~ ^[Yy]$ ]]; then
-          if kill -STOP "$pid"; then
-            TERMINATED_PROCESSES+=("$pid")
-            success_mark "进程 $pid 已暂停"
-          else
-            error_mark "进程暂停失败"
-            exit 1
-          fi
-        fi
-        ;;
-    esac
+    for pid in $pids; do
+      [[ "$pid" =~ ^[0-9]+$ ]] || continue
+      if [ "$pid" != "1" ]; then  # 排除init进程
+        error_mark "发现非服务进程占用端口 $port (PID:$pid)"
+        exit 1
+      fi
+    done
   done
 }
 
@@ -176,20 +161,8 @@ issue_certificate() {
 restore_environment() {
   step_begin 4 "环境恢复"
 
-  # 4.1 恢复进程
-  if [ ${#TERMINATED_PROCESSES[@]} -gt 0 ]; then
-    step_detail "恢复暂停进程"
-    for pid in "${TERMINATED_PROCESSES[@]}"; do
-      if kill -CONT "$pid"; then
-        success_mark "进程 $pid 已恢复"
-      else
-        error_mark "进程 $pid 恢复失败"
-      fi
-    done
-  fi
-
-  # 4.2 重启Nginx
-  if [ $NGINX_STOPPED -eq 1 ] && [ $CERT_ISSUED -eq 1 ]; then
+  # 4.1 重启Nginx服务
+  if [[ "${SERVICE_STATUS[nginx]}" == "stopped" ]] && [ $CERT_ISSUED -eq 1 ]; then
     step_detail "重启Nginx服务"
     if systemctl start nginx; then
       success_mark "Nginx服务已恢复"
@@ -203,7 +176,7 @@ restore_environment() {
 main() {
   trap 'restore_environment' EXIT
   pre_check
-  manage_ports
+  manage_services
   issue_certificate
 }
 
