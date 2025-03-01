@@ -8,59 +8,56 @@ COLOR_WARNING='\033[33m'
 COLOR_ERROR='\033[31m'
 COLOR_RESET='\033[0m'
 
-# 全局状态变量
-NGINX_STOPPED=0
-
-show_step() {
-  echo -e "\n${COLOR_INFO}[STEP $1] $2${COLOR_RESET}"
-}
-
-show_success() {
-  echo -e "${COLOR_SUCCESS}$1${COLOR_RESET}"
-}
-
-show_error() {
-  echo -e "${COLOR_ERROR}$1${COLOR_RESET}"
-}
-
-check_port_conflict() {
-  local port=$1
-  if ss -tulpn | grep -q ":${port} "; then
-    show_error "检测到端口 ${port} 被占用，请先停止相关服务"
-    exit 1
+# 系统检测
+check_system() {
+  if ! command -v snap >/dev/null 2>&1; then
+    echo -e "${COLOR_ERROR}检测到系统未安装snapd，正在自动安装...${COLOR_RESET}"
+    sudo apt-get update -qq && sudo apt-get install -y snapd
+    sudo systemctl enable --now snapd.socket
+    export PATH=$PATH:/snap/bin
   fi
 }
 
+# 安装Certbot
 install_certbot() {
-  show_step 1 "安装Certbot"
+  echo -e "\n${COLOR_INFO}[STEP 1] 安装Certbot${COLOR_RESET}"
   sudo snap install core
   sudo snap refresh core
   sudo snap install --classic certbot
   sudo ln -sf /snap/bin/certbot /usr/bin/certbot
-  show_success "Certbot安装完成"
+  echo -e "${COLOR_SUCCESS}Certbot安装完成 ✓${COLOR_RESET}"
 }
 
+# 申请证书
 request_certificate() {
-  show_step 2 "申请证书"
+  echo -e "\n${COLOR_INFO}[STEP 2] 申请证书${COLOR_RESET}"
   read -p "请输入域名：" domain
-  
-  check_port_conflict 80
-  check_port_conflict 443
 
+  # 端口检测
+  for port in 80 443; do
+    if ss -tulpn | grep -q ":${port} "; then
+      echo -e "${COLOR_ERROR}检测到端口 ${port} 被占用，请先停止相关服务 ✗${COLOR_RESET}"
+      exit 1
+    fi
+  done
+
+  # 执行签发
   if certbot certonly --standalone \
     --register-unsafely-without-email \
     --non-interactive \
     --agree-tos \
     -d "$domain"; then
-    show_success "证书申请成功"
-    echo "证书存储位置：/etc/letsencrypt/live/${domain}/"
+    echo -e "${COLOR_SUCCESS}证书申请成功 ✓"
+    echo -e "证书存储位置：/etc/letsencrypt/live/${domain}/${COLOR_RESET}"
   else
-    show_error "证书申请失败"
+    echo -e "${COLOR_ERROR}证书申请失败 ✗${COLOR_RESET}"
     exit 1
   fi
 }
 
+# 主流程
 main() {
+  check_system
   install_certbot
   request_certificate
 }
